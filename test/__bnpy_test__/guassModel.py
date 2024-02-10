@@ -256,6 +256,20 @@ class Mock_Gauss:
             B[k] -= kappa[k] * np.outer(m[k], m[k])
         return nu, B, m, kappa
 
+    def update_global_params(self, SS, rho=None, **kwargs):
+        """ Update parameters to maximize objective given suff stats.
+
+        Post Condition
+        -------
+        Either EstParams or Post attributes updated in place.
+        """
+        if self.inferType == 'EM':
+            return self.updateEstParams_MaxLik(SS)
+        elif rho is not None and rho < 1.0:
+            return self.updatePost_stochastic(SS, rho)
+        else:
+            return self.updatePost(SS)
+
     def updatePost(self, SS):
         ''' Update attribute Post for all comps given suff stats.
 
@@ -276,19 +290,78 @@ class Mock_Gauss:
         self.Post.setField('B', B, dims=('K', 'D', 'D'))
         self.K = SS.K
 
-    def update_global_params(self, SS, rho=None, **kwargs):
-        """ Update parameters to maximize objective given suff stats.
+    def updatePost_stochastic(self, SS, rho):
+        ''' Update attribute Post for all comps given suff stats
+
+        Update uses the stochastic variational formula.
 
         Post Condition
-        -------
-        Either EstParams or Post attributes updated in place.
-        """
-        if self.inferType == 'EM':
-            return self.updateEstParams_MaxLik(SS)
-        elif rho is not None and rho < 1.0:
-            return self.updatePost_stochastic(SS, rho)
+        ---------
+        Attributes K and Post updated in-place.
+        '''
+        assert hasattr(self, 'Post')
+        assert self.Post.K == SS.K
+        #self.ClearCache()
+
+        self.convertPostToNatural()
+        nu, Bnat, km, kappa = self.calcNaturalPostParams(SS)
+        Post = self.Post
+        Post.nu[:] = (1 - rho) * Post.nu + rho * nu
+        Post.Bnat[:] = (1 - rho) * Post.Bnat + rho * Bnat
+        Post.km[:] = (1 - rho) * Post.km + rho * km
+        Post.kappa[:] = (1 - rho) * Post.kappa + rho * kappa
+        self.convertPostToCommon()
+
+    def calcNaturalPostParams(self, SS):
+        ''' Calc  natural posterior parameters given suff stats SS.
+
+        Returns
+        --------
+        nu : 1D array, size K
+        Bnat : 3D array, size K x D x D
+        km : 2D array, size K x D
+        kappa : 1D array, size K
+        '''
+        Prior = self.Prior
+        nu = Prior.nu + SS.N
+        kappa = Prior.kappa + SS.N
+        km = Prior.kappa * Prior.m + SS.x
+        Bnat = (Prior.B + Prior.kappa * np.outer(Prior.m, Prior.m)) + SS.xxT
+        return nu, Bnat, km, kappa
+
+    def convertPostToNatural(self):
+        ''' Convert current posterior params from common to natural form
+        '''
+        Post = self.Post
+        assert hasattr(Post, 'nu')
+        assert hasattr(Post, 'kappa')
+        km = Post.m * Post.kappa[:, np.newaxis]
+        Bnat = np.empty((self.K, self.D, self.D))
+        for k in range(self.K):
+            Bnat[k] = Post.B[k] + np.outer(km[k], km[k]) / Post.kappa[k]
+        Post.setField('km', km, dims=('K', 'D'))
+        Post.setField('Bnat', Bnat, dims=('K', 'D', 'D'))
+
+    def convertPostToCommon(self):
+        ''' Convert current posterior params from natural to common form
+        '''
+        Post = self.Post
+        assert hasattr(Post, 'nu')
+        assert hasattr(Post, 'kappa')
+        if hasattr(Post, 'm'):
+            Post.m[:] = Post.km / Post.kappa[:, np.newaxis]
         else:
-            return self.updatePost(SS)
+            m = Post.km / Post.kappa[:, np.newaxis]
+            Post.setField('m', m, dims=('K', 'D'))
+
+        if hasattr(Post, 'B'):
+            B = Post.B  # update in place, no reallocation!
+        else:
+            B = np.empty((self.K, self.D, self.D))
+        for k in range(self.K):
+            B[k] = Post.Bnat[k] - \
+                   np.outer(Post.km[k], Post.km[k]) / Post.kappa[k]
+        Post.setField('B', B, dims=('K', 'D', 'D'))
 
     def calcLogSoftEvMatrix_FromPost(self, Data, **kwargs):
         ''' Calculate expected log soft ev matrix under Post.
@@ -304,6 +377,7 @@ class Mock_Gauss:
                       + 0.5 * self.GetCached('E_logdetL', k) \
                       - 0.5 * self._mahalDist_Post(Data.X, k)
         return L
+
 
     def getDatasetScale(self, SS):
         ''' Get number of observed scalars in dataset from suff stats.

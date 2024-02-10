@@ -29,7 +29,7 @@ class GaussianDPMM(nn.Module):
             # we enforce diagonality on B0. If it is full, we can have numerical error due to inverse
             raise NotImplementedError('The current implementation can lead to numerical errors if the prior '
                                       'of the precision is parametrised by a full matrix!')
-            self.B0 = self.__validate_arg__("B0", B0, (K, D, D), [PositiveDefinite()])
+            #self.B0 = self.__validate_arg__("B0", B0, (K, D, D), [PositiveDefinite()])
 
         # get the Function associated to this prior params
         self.__dpmm_func__ = GaussianDPMMFunctionGenerator(self.alphaDP, self.tau0, self.c0, self.n0, self.B0,
@@ -37,15 +37,15 @@ class GaussianDPMM(nn.Module):
 
         # define the variational parameters
         # var params of beta (stick-breaking)
-        self.u = th.nn.Parameter(th.empty(K))
-        self.v = th.nn.Parameter(th.empty(K))
+        self.nat_u = th.nn.Parameter(th.empty(K))
+        self.nat_v = th.nn.Parameter(th.empty(K))
 
         # var params of emission
-        self.tau = th.nn.Parameter(th.empty(K, D))  # mean of mu posterior
-        self.c = th.nn.Parameter(th.empty(K))  # precision coeff. of mu posterior
+        self.nat_tau = th.nn.Parameter(th.empty(K, D))  # mean of mu posterior
+        self.nat_c = th.nn.Parameter(th.empty(K))  # precision coeff. of mu posterior
 
-        self.n = th.nn.Parameter(th.empty(K))  # deg_of_freedom of precision posterior wishart(n,B)
-        self.B = th.nn.Parameter(th.empty(K, D) if is_diagonal else th.empty(K, D, D))  # B matrix of precision posterior wishart(n,B)
+        self.nat_n = th.nn.Parameter(th.empty(K))  # deg_of_freedom of precision posterior wishart(n,B)
+        self.nat_B = th.nn.Parameter(th.empty(K, D) if is_diagonal else th.empty(K, D, D))  # B matrix of precision posterior wishart(n,B)
         self.init_var_params()
 
     @staticmethod
@@ -81,38 +81,29 @@ class GaussianDPMM(nn.Module):
 
         # TODO: initialisation is crucial
         # var params of beta (stick-breaking)
-        INIT.constant_(self.u, 1)
-        INIT.constant_(self.v, 1)
+        INIT.constant_(self.nat_u, 1)
+        INIT.constant_(self.nat_v, 1)
 
         # var params of emission
         if x is not None:
             x_np = x.detach().numpy()
             # initialisation makes the difference: we should cover the input space
             mean_np, _ = kmeans_plusplus(x_np, self.K)
-            self.tau.data = th.tensor(mean_np)
+            self.nat_tau.data = th.tensor(mean_np)  # TODO: check if it holds for natural
         else:
-            INIT.zeros_(self.tau)
+            INIT.zeros_(self.nat_tau)
 
-        INIT.constant_(self.c, 1)
+        INIT.constant_(self.nat_c, 1)
 
-        INIT.constant_(self.n, self.D)
+        INIT.constant_(self.nat_n, self.D)
 
         eye_val = th.ones(self.K, self.D)
-        self.B.data = eye_val if self.is_diagonal else th.diag_embed(eye_val)
+        self.nat_B.data = eye_val if self.is_diagonal else th.diag_embed(eye_val)
 
     def forward(self, x):
-        pi, elbo = self.__dpmm_func__(x, self.u, self.v, self.tau, self.c,
-                                      self.n, self.B)
+        pi, elbo = self.__dpmm_func__(x, self.nat_u, self.nat_v, self.nat_tau, self.nat_c,
+                                      self.nat_n, self.nat_B)
         return pi, elbo
-
-    def get_component_weights(self):
-        with th.no_grad():
-            expected_beta = self.u / (self.u + self.v)
-            beta1m_cumprod = (1 - expected_beta).cumprod(-1)
-            return F.pad(expected_beta, (0, 1), value=1) * F.pad(beta1m_cumprod, (1, 0), value=1)
-
-    def n_used_components(self):
-        return th.sum(self.get_component_weights() > 1e-2).item()
 
 
 if __name__ == '__main__':
@@ -124,7 +115,6 @@ if __name__ == '__main__':
     from torch.distributions import MultivariateNormal
     from tqdm import tqdm
     import matplotlib.pyplot as plt
-    from .__bnpy_test__ import get_bnpy_impl, get_bnpy_train_it_results
 
     num_classes = 4
     D = 2
@@ -141,7 +131,7 @@ if __name__ == '__main__':
 
     K = 20
     D = 2
-    lr = 1
+
     num_iterations = 500
 
     # prior params
@@ -153,13 +143,14 @@ if __name__ == '__main__':
 
     my_DPMM = GaussianDPMM(K=K, D=D, alphaDP=alphaDP, tau0=tau0, c0=c0, n0=n0, B0=B0, is_diagonal=True)
 
+    lr = 0.01
     param_names_to_update = []
-    param_names_to_update.append('u')
-    param_names_to_update.append('v')
-    param_names_to_update.append('tau')
-    param_names_to_update.append('c')
-    param_names_to_update.append('n')
-    param_names_to_update.append('B')
+    param_names_to_update.append('nat_u')
+    param_names_to_update.append('nat_v')
+    param_names_to_update.append('nat_tau')
+    param_names_to_update.append('nat_c')
+    param_names_to_update.append('nat_n')
+    param_names_to_update.append('nat_B')
 
     my_optim = optim.SGD(params=[my_DPMM.get_parameter(n) for n in param_names_to_update], lr=lr)
 
@@ -169,34 +160,10 @@ if __name__ == '__main__':
 
         my_optim.zero_grad()
         pi, elbo = my_DPMM(x)
-        elbo_list.append(elbo.detach().item())
-
-        # get bnpy val
-        bnpy_hmodel = get_bnpy_impl(K, D,
-                                    my_DPMM.u.detach(), my_DPMM.v.detach(), alphaDP,
-                                    my_DPMM.tau.detach(), my_DPMM.c.detach(),
-                                    my_DPMM.n.detach(), th.diag_embed(1/my_DPMM.B.detach()),
-                                    tau0, c0, n0, th.diag_embed(1/B0))
-
-        bnpy_pi, bnpy_elbo, *bnpy_updates = get_bnpy_train_it_results(bnpy_hmodel, x)
-
-        # test pi and elbo
-        assert th.all(th.isclose(pi.detach(), th.tensor(bnpy_pi).float(), atol=1e-3)), "pi diag is not correct"
-        assert th.all(th.isclose(elbo.detach(), th.tensor(bnpy_elbo).float())), "elbo diag is not correct"
-
         pbar.set_postfix({'ELBO loss': elbo.detach().item()})
-
+        elbo_list.append(elbo.detach().item())
         elbo.backward()
         my_optim.step()
-
-        param_names = ['u', 'v', 'tau', 'c', 'n']
-        for i in range(len(param_names)):
-            name = param_names[i]
-            if name in param_names_to_update:
-                my_val = my_DPMM.get_parameter(name).detach()
-                bnpy_val = bnpy_updates[i]
-                if lr == 1:
-                    assert th.all(th.isclose(my_val, th.tensor(bnpy_val).float(), atol=1e-3)), f"update {name} is not correct"
 
     a = 2
     elbo_array = np.array(elbo_list)

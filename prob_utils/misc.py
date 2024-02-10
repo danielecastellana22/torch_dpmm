@@ -3,9 +3,6 @@ import torch as th
 __all__ = ['my_scatter_nd', 'log_normalise', 'batched_trace_square_mat', 'multidigamma',
            'batch_mahalanobis_dist', 'batch_outer_product']
 
-import torch.linalg
-
-
 def my_scatter_nd(data, idx_tensor, shape):
     return th.sparse_coo_tensor(idx_tensor, data, shape).coalesce().to_dense().to(data.device)
 
@@ -53,7 +50,7 @@ def batch_mahalanobis_dist(M, v, is_M_diagonal):
 
 def batch_outer_product(a, b):
     assert a.shape[-1] == b.shape[-1]
-    return th.einsum('...ij,...ij->...ii', a.unsqueeze(-1), b.unsqueeze(-1))
+    return th.einsum('...aj,...bj->...ab', a.unsqueeze(-1), b.unsqueeze(-1))
 
 
 if __name__ == '__main__':
@@ -79,7 +76,7 @@ if __name__ == '__main__':
     # full case (stable)
     a =  th.rand(K, D, D)
     M = th.einsum('...ij,...kj->...ik', a, a) + 5 * th.diag_embed(th.ones(K, D))
-    l = torch.linalg.cholesky(M)
+    l = th.linalg.cholesky(M)
     M_inv = th.linalg.inv(M)
     v = th.randn(BS, K, D)
     my_val = batch_mahalanobis_dist(M_inv.unsqueeze(0), v, is_M_diagonal=False)
@@ -87,9 +84,9 @@ if __name__ == '__main__':
     assert th.all(th.isclose(my_val, torch_val)), "full batch_mahalanobis fails"
 
     # full case (stable) multiple batch dimensin
-    a =  th.rand(K, K, D, D)
+    a = th.rand(K, K, D, D)
     M = th.einsum('...ij,...kj->...ik', a, a) + 5 * th.diag_embed(th.ones(K, K, D))
-    l = torch.linalg.cholesky(M)
+    l = th.linalg.cholesky(M)
     M_inv = th.linalg.inv(M)
     v = th.randn(BS, K, K, D)
     my_val = batch_mahalanobis_dist(M_inv.unsqueeze(0), v, is_M_diagonal=False)

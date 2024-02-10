@@ -445,6 +445,28 @@ class Mock_DP:
                         **kwargs)
 
     def update_global_params(self, SS, rho=None, **kwargs):
+        ''' Update global parameter attributes for this model.
+
+        This is the M-step of EM algorithm.
+
+        Args
+        ----
+        SS : :class:`.SuffStatBag`
+            Sufficient statistics needed for update.
+
+        Returns
+        -------
+        None
+
+        Post Condition
+        --------------
+        Attribute K reset to the number of active clusters in SS.
+        Global parameter attributes updated in-place or reallocated.
+        '''
+        self.update_global_params_soVB(SS, rho, **kwargs)
+
+
+    def update_global_params_VB(self, SS, **kwargs):
         """ Update eta1, eta0 to optimize the ELBO objective.
 
         Post Condition for VB
@@ -457,4 +479,19 @@ class Mock_DP:
         eta0 = self.gamma0 + convertToN0(N)
         self.eta1 = eta1
         self.eta0 = eta0
+        #self.set_helper_params()
+
+    def update_global_params_soVB(self, SS, rho, **kwargs):
+        """ Update eta1, eta0 to optimize stochastic ELBO objective.
+
+        Post Condition for VB
+        -------
+        eta1 and eta0 set to valid posterior for SS.K components.
+        """
+        N = SS.getCountVec()
+        assert self.K == SS.K
+        eta1 = self.gamma1 + N
+        eta0 = self.gamma0 + convertToN0(N)
+        self.eta1 = rho * eta1 + (1 - rho) * self.eta1
+        self.eta0 = rho * eta0 + (1 - rho) * self.eta0
         #self.set_helper_params()
