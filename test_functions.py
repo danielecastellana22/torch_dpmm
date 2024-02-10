@@ -1,6 +1,6 @@
 import torch as th
-from test.__bnpy_test__ import *
-from models.functions import *
+from .test_utils.__bnpy_test__ import *
+from .models.functions import *
 
 th.manual_seed(1234)
 

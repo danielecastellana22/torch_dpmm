@@ -1,9 +1,9 @@
 import torch as th
 from torch.autograd.function import once_differentiable
 from torch.autograd import Function
-from prob_utils import *
-from prob_utils.constants import *
-from prob_utils.kl_div import *
+from ..prob_utils import *
+from ..prob_utils.constants import *
+from ..prob_utils.kl_div import *
 from torch.special import digamma
 from torch.linalg import solve, slogdet
 

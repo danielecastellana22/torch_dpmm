@@ -2,8 +2,8 @@ import torch as th
 import torch.nn as nn
 import torch.nn.init as INIT
 from sklearn.cluster import kmeans_plusplus
-from prob_utils.constraints import *
-from .functions import GaussianDPMMFunctionGenerator
+from ..prob_utils.constraints import *
+from .functions import GaussianDPMMFunctionGenerator, natural_to_common
 
 
 class GaussianDPMM(nn.Module):
@@ -22,14 +22,13 @@ class GaussianDPMM(nn.Module):
         self.c0 = self.__validate_arg__("c0", c0, (K,), [Positive()])
         self.n0 = self.__validate_arg__("n0", n0, (K,), [GreaterThan(D-1)])
 
-        self.is_B0_diagonal = not (B0.ndim >= 2 and B0.shape[-2] == (D, D))
-        if self.is_B0_diagonal:
-            self.B0 = self.__validate_arg__("B0", B0, (K, D), [Positive()])
-        else:
+        if th.is_tensor(B0) and B0.ndim > 2:
             # we enforce diagonality on B0. If it is full, we can have numerical error due to inverse
             raise NotImplementedError('The current implementation can lead to numerical errors if the prior '
                                       'of the precision is parametrised by a full matrix!')
-            #self.B0 = self.__validate_arg__("B0", B0, (K, D, D), [PositiveDefinite()])
+
+        self.is_B0_diagonal = True
+        self.B0 = self.__validate_arg__("B0", B0, (K, D), [Positive()])
 
         # get the Function associated to this prior params
         self.__dpmm_func__ = GaussianDPMMFunctionGenerator(self.alphaDP, self.tau0, self.c0, self.n0, self.B0,
@@ -104,6 +103,20 @@ class GaussianDPMM(nn.Module):
         pi, elbo = self.__dpmm_func__(x, self.nat_u, self.nat_v, self.nat_tau, self.nat_c,
                                       self.nat_n, self.nat_B)
         return pi, elbo
+
+    @th.no_grad()
+    def get_expected_params(self):
+        u, v, tau, c, n, B = natural_to_common(self.nat_u, self.nat_v,
+                                               self.nat_tau, self.nat_c, self.nat_n, self.nat_B, self.is_diagonal)
+
+        sticks = u / u + v
+        log_1_minus_sticks = th.log(1 - sticks)
+        pi = th.exp(th.cumsum(log_1_minus_sticks, -1) - log_1_minus_sticks + th.log(sticks))
+
+        mu = tau
+        sigma = (B if not self.is_diagonal else th.diag_embed(B)) / (n - self.D - 1).view(-1, 1, 1)
+
+        return pi, mu, sigma
 
 
 if __name__ == '__main__':
