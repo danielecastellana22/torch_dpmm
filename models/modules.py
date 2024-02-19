@@ -109,7 +109,7 @@ class GaussianDPMM(nn.Module):
         u, v, tau, c, n, B = natural_to_common(self.nat_u, self.nat_v,
                                                self.nat_tau, self.nat_c, self.nat_n, self.nat_B, self.is_diagonal)
 
-        sticks = u / u + v
+        sticks = u / (u + v)
         log_1_minus_sticks = th.log(1 - sticks)
         pi = th.exp(th.cumsum(log_1_minus_sticks, -1) - log_1_minus_sticks + th.log(sticks))
 
