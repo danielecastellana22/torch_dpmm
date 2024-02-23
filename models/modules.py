@@ -100,9 +100,9 @@ class GaussianDPMM(nn.Module):
         self.nat_B.data = eye_val if self.is_diagonal else th.diag_embed(eye_val)
 
     def forward(self, x):
-        pi, elbo = self.__dpmm_func__(x, self.nat_u, self.nat_v, self.nat_tau, self.nat_c,
+        r, elbo = self.__dpmm_func__(x, self.nat_u, self.nat_v, self.nat_tau, self.nat_c,
                                       self.nat_n, self.nat_B)
-        return pi, elbo
+        return r, elbo
 
     @th.no_grad()
     def get_expected_params(self):
@@ -111,12 +111,12 @@ class GaussianDPMM(nn.Module):
 
         sticks = u / (u + v)
         log_1_minus_sticks = th.log(1 - sticks)
-        pi = th.exp(th.cumsum(log_1_minus_sticks, -1) - log_1_minus_sticks + th.log(sticks))
+        r = th.exp(th.cumsum(log_1_minus_sticks, -1) - log_1_minus_sticks + th.log(sticks))
 
         mu = tau
         sigma = (B if not self.is_diagonal else th.diag_embed(B)) / (n - self.D - 1).view(-1, 1, 1)
 
-        return pi, mu, sigma
+        return r, mu, sigma
 
 
 if __name__ == '__main__':
