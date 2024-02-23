@@ -3,7 +3,8 @@ import torch.nn as nn
 import torch.nn.init as INIT
 from sklearn.cluster import kmeans_plusplus
 from ..prob_utils.constraints import *
-from .functions import GaussianDPMMFunctionGenerator, natural_to_common, common_to_natural
+from .functions import GaussianDPMMFunctionGenerator, natural_to_common, common_to_natural, E_log_x
+from torch.distributions import MultivariateNormal
 
 
 class GaussianDPMM(nn.Module):
@@ -124,7 +125,17 @@ class GaussianDPMM(nn.Module):
         mu = tau
         sigma = (B if not self.is_diagonal else th.diag_embed(B)) / (n - self.D - 1).view(-1, 1, 1)
 
-        return r, mu, sigma
+        # TODO: how to select the reshold? 1/100*alph as pyro?
+        mask = r > 1e-3
+        return r[mask], mu[mask], sigma[mask]
+
+    @th.no_grad()
+    def get_expected_log_likelihood(self, x):
+        r, mu, sigma = self.get_expected_params()
+        # TODO: implement your computation instead of relying on pytorch
+        exp_loglike = MultivariateNormal(loc=mu, covariance_matrix=sigma).log_prob(x.unsqueeze(1))
+        # TODO: maybe the max should go outside? what about the r?
+        return th.max(exp_loglike,  -1)[0]
 
 
 if __name__ == '__main__':
