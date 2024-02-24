@@ -125,7 +125,7 @@ class GaussianDPMM(nn.Module):
         mu = tau
         sigma = (B if not self.is_diagonal else th.diag_embed(B)) / (n - self.D - 1).view(-1, 1, 1)
 
-        # TODO: how to select the reshold? 1/100*alph as pyro?
+        # TODO: how to select the treshold? 1/100*alph as pyro?
         mask = r > 1e-3
         return r[mask], mu[mask], sigma[mask]
 

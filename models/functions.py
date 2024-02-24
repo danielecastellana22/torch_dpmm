@@ -137,8 +137,12 @@ class GaussianDPMMFunctionGenerator:
                 x_square = x ** 2 if self.is_B_diagonal else batch_outer_product(x, x)
                 r_x_square = th.einsum("bk,bk...->k...", r, x_square.unsqueeze(1))
                 nat_B_update = self.B0 + self.c0_tau0_2 + r_x_square
-                return nat_u_update, nat_v_update, nat_tau_update, nat_c_update, nat_n_update, nat_B_update
+                nat_updates = nat_u_update, nat_v_update, nat_tau_update, nat_c_update, nat_n_update, nat_B_update
 
+                # compute mask to set gradient to 0 for components without data
+                component_mask = N_k > 1e-3  # TODO: how do we choose the treshold?
+
+                return nat_updates, component_mask
 
             @staticmethod
             def forward(ctx, x, *nat_params):
@@ -153,15 +157,21 @@ class GaussianDPMMFunctionGenerator:
             def backward(ctx, pi_grad, elbo_grad):
                 x, r, *nat_params = ctx.saved_tensors
 
-                nat_update = GaussianDPMMFunction.__dpmm_natural_update__(x, r)
-
+                nat_updates, component_mask = GaussianDPMMFunction.__dpmm_natural_update__(x, r)
                 # The natural gradient is the difference between the current value and the new one
                 # We also consider elbo_grad to mimic the backpropagation. It should be always 1.
-                nat_params_grad = tuple((nat_params[i] - nat_update[i])*elbo_grad for i in range(len(nat_params)))
+
+                nat_params_grad = []
+                for i in range(len(nat_params)):
+                    nat_p = nat_params[i]
+                    nat_upd = nat_updates[i]
+                    grad_mask = component_mask.view(*([-1]+[1]*(nat_p.ndim-1)))
+                    # mask the gradient for compoents wihtout data
+                    nat_params_grad.append(elbo_grad * grad_mask *(nat_p-nat_upd))
 
                 # there is no gradient for the data x (for now)
                 x_grad = None
-                return (x_grad,) + nat_params_grad
+                return (x_grad,) + tuple(nat_params_grad)
 
         return GaussianDPMMFunction
 
