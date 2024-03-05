@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.init as INIT
 from sklearn.cluster import kmeans_plusplus
 from ..prob_utils.constraints import *
-from .functions import GaussianDPMMFunctionGenerator, natural_to_common
+from .functions import GaussianDPMMFunctionGenerator, natural_to_common, common_to_natural
 
 
 class GaussianDPMM(nn.Module):
@@ -79,30 +79,38 @@ class GaussianDPMM(nn.Module):
     def init_var_params(self, x=None):
 
         # TODO: initialisation is crucial
-        # var params of beta (stick-breaking)
-        INIT.constant_(self.nat_u, 1)
-        INIT.constant_(self.nat_v, 1)
+        # these params are the same in the natural and in the common form
+        u = th.ones_like(self.nat_u)
+        v = th.ones_like(self.nat_u)
+        c = th.ones_like(self.nat_c)
+        n = (self.D+2) * th.ones_like(self.nat_n)
 
         # var params of emission
         if x is not None:
             x_np = x.detach().numpy()
             # initialisation makes the difference: we should cover the input space
             mean_np, _ = kmeans_plusplus(x_np, self.K)
-            self.nat_tau.data = th.tensor(mean_np)  # TODO: check if it holds for natural
+            tau = th.tensor(mean_np)
+            B_eye_val = th.var(x) * th.ones(self.K, self.D)
         else:
-            INIT.zeros_(self.nat_tau)
+            tau = th.zeros_like(self.nat_tau)
+            B_eye_val = th.ones(self.K, self.D)
 
-        INIT.constant_(self.nat_c, 1)
+        B = B_eye_val if self.is_diagonal else th.diag_embed(B_eye_val)
 
-        INIT.constant_(self.nat_n, self.D)
+        nat_u, nat_v, nat_tau, nat_c, nat_n, nat_B = common_to_natural(u, v, tau, c, n, B, self.is_diagonal)
 
-        eye_val = th.ones(self.K, self.D)
-        self.nat_B.data = eye_val if self.is_diagonal else th.diag_embed(eye_val)
+        self.nat_u.data = nat_u
+        self.nat_v.data = nat_v
+        self.nat_tau.data = nat_tau
+        self.nat_c.data = nat_c
+        self.nat_n.data = nat_n
+        self.nat_B.data = nat_B
 
     def forward(self, x):
-        r, elbo = self.__dpmm_func__(x, self.nat_u, self.nat_v, self.nat_tau, self.nat_c,
+        r, elbo_loss = self.__dpmm_func__(x, self.nat_u, self.nat_v, self.nat_tau, self.nat_c,
                                       self.nat_n, self.nat_B)
-        return r, elbo
+        return r, elbo_loss
 
     @th.no_grad()
     def get_expected_params(self):
