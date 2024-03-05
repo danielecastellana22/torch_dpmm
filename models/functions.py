@@ -146,7 +146,7 @@ class GaussianDPMMFunctionGenerator:
                 B_inv = 1 / B if self.is_B_diagonal else th.linalg.inv(B)
                 r, elbo = GaussianDPMMFunction.__dpmm_computation__(x, u, v, tau, c, n, B_inv)
                 ctx.save_for_backward(x, r, *nat_params)
-                return r, elbo
+                return r, -elbo
 
             @staticmethod
             @once_differentiable
