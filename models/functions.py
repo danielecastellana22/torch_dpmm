@@ -145,7 +145,7 @@ class GaussianDPMMFunctionGenerator:
                 u, v, tau, c, n, B = natural_to_common(*nat_params, self.is_B_diagonal)
                 B_inv = 1 / B if self.is_B_diagonal else th.linalg.inv(B)
                 r, elbo = GaussianDPMMFunction.__dpmm_computation__(x, u, v, tau, c, n, B_inv)
-                ctx.save_for_backward(x, r, *nat_params)
+                ctx.save_for_backward(x, r, tau, n, B_inv, *nat_params)
                 return r, -elbo
 
             @staticmethod
