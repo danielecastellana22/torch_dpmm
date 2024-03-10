@@ -39,6 +39,7 @@ def E_log_x(x, tau, c, n, B_inv, is_diagonal):
     return 0.5 * (- D * LOG_2PI + E_log_prec(n, B_inv, is_diagonal) - E_mahalanobis_dist)
 
 
+@th.no_grad()
 def natural_to_common(nat_u, nat_v, nat_tau, nat_c, nat_n, nat_B, is_diagonal):
     u = nat_u
     v = nat_v
@@ -54,6 +55,7 @@ def natural_to_common(nat_u, nat_v, nat_tau, nat_c, nat_n, nat_B, is_diagonal):
     return u, v, tau, c, n, B
 
 
+@th.no_grad()
 def common_to_natural(u, v, tau, c, n, B, is_diagonal):
     ''' Convert current posterior params from common to nat form
     '''
@@ -75,9 +77,10 @@ def common_to_natural(u, v, tau, c, n, B, is_diagonal):
 # c0*tau0^2, B0_inv, c0*tau0
 class GaussianDPMMFunctionGenerator:
 
-    def __init__(self, alphaDP, tau0, c0, n0, B0, is_B_diagonal, is_B0_diagonal):
-        K = tau0.shape[0]
-        self.alphaDP = alphaDP.expand(K)  # we expand it to match the shape during the computations
+    # v0 should be alphaDP
+    def __init__(self, u0, v0, tau0, c0, n0, B0, is_B_diagonal, is_B0_diagonal):
+        self.u0 = u0
+        self.v0 = v0
         self.tau0 = tau0
         self.c0 = c0
         self.n0 = n0
@@ -96,7 +99,6 @@ class GaussianDPMMFunctionGenerator:
         tau0_square = tau0 ** 2 if is_B_diagonal else batch_outer_product(tau0, tau0)
         self.c0_tau0_2 = th.einsum("k,k...->k...", c0, tau0_square)
         self.B0_inv = 1 / B0 if is_B0_diagonal else th.linalg.inv(B0)
-        self.K_ones = th.tensor(1.).expand(K)  # this is used for the beta kl
 
     def get_function(self):
 
@@ -113,7 +115,7 @@ class GaussianDPMMFunctionGenerator:
 
                 # compute the elbo
                 elbo = ((r * data_contribution).sum()
-                        - beta_kl_div(u, v, self.K_ones, self.alphaDP).sum()
+                        - beta_kl_div(u, v, self.u0, self.v0).sum()
                         - mv_normal_wishart_kl_div(tau, c, n, B_inv, self.tau0, self.c0, self.n0, self.B0_inv,
                                                    is_V0_diagonal=self.is_B_diagonal,
                                                    is_V1_diagonal=self.is_B0_diagonal).sum()
@@ -127,8 +129,8 @@ class GaussianDPMMFunctionGenerator:
                 # The natural gradient is related to the full_batch update.
                 # At first, we compute the update for all var params
                 N_k = th.sum(r, dim=0)  # has shape K
-                nat_u_update = (1 + N_k)
-                nat_v_update = self.alphaDP + (th.sum(N_k) - th.cumsum(N_k, 0))
+                nat_u_update = self.u0 + N_k
+                nat_v_update = self.v0 + (th.sum(N_k) - th.cumsum(N_k, 0))
                 nat_c_update = self.c0 + N_k
                 nat_n_update = self.n0 + N_k
 
@@ -139,10 +141,7 @@ class GaussianDPMMFunctionGenerator:
                 nat_B_update = self.B0 + self.c0_tau0_2 + r_x_square
                 nat_updates = nat_u_update, nat_v_update, nat_tau_update, nat_c_update, nat_n_update, nat_B_update
 
-                # compute mask to set gradient to 0 for components without data
-                component_mask = N_k > 1e-3  # TODO: how do we choose the treshold?
-
-                return nat_updates, component_mask
+                return nat_updates
 
             @staticmethod
             def forward(ctx, x, *nat_params):
@@ -157,21 +156,14 @@ class GaussianDPMMFunctionGenerator:
             def backward(ctx, pi_grad, elbo_grad):
                 x, r, *nat_params = ctx.saved_tensors
 
-                nat_updates, component_mask = GaussianDPMMFunction.__dpmm_natural_update__(x, r)
+                nat_updates = GaussianDPMMFunction.__dpmm_natural_update__(x, r)
                 # The natural gradient is the difference between the current value and the new one
                 # We also consider elbo_grad to mimic the backpropagation. It should be always 1.
-
-                nat_params_grad = []
-                for i in range(len(nat_params)):
-                    nat_p = nat_params[i]
-                    nat_upd = nat_updates[i]
-                    grad_mask = component_mask.view(*([-1]+[1]*(nat_p.ndim-1)))
-                    # mask the gradient for compoents wihtout data
-                    nat_params_grad.append(elbo_grad * grad_mask *(nat_p-nat_upd))
+                nat_params_grad = tuple((nat_params[i] - nat_updates[i])*elbo_grad for i in range(len(nat_params)))
 
                 # there is no gradient for the data x (for now)
                 x_grad = None
-                return (x_grad,) + tuple(nat_params_grad)
+                return (x_grad,) + nat_params_grad
 
         return GaussianDPMMFunction
 
