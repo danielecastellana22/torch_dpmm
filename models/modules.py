@@ -24,13 +24,13 @@ class GaussianDPMM(nn.Module):
         self.c0 = self.__validate_arg__("c0", c0, (K,), [Positive()])
         self.n0 = self.__validate_arg__("n0", n0, (K,), [GreaterThan(D-1)])
 
-        if th.is_tensor(B0) and B0.ndim > 2:
-            # we enforce diagonality on B0. If it is full, we can have numerical error due to inverse
-            raise NotImplementedError('The current implementation can lead to numerical errors if the prior '
-                                      'of the precision is parametrised by a full matrix!')
-
-        self.is_B0_diagonal = True
-        self.B0 = self.__validate_arg__("B0", B0, (K, D), [Positive()])
+        B0 = th.tensor(B0)
+        if B0.ndim > 2:
+            self.is_B0_diagonal = False
+            self.B0 = self.__validate_arg__("B0", B0, (K, D, D), [PositiveDefinite()])
+        else:
+            self.is_B0_diagonal = True
+            self.B0 = self.__validate_arg__("B0", B0, (K, D), [Positive()])
 
         # get the Function associated to this prior params
         self.__update_computation_fucntion__()
@@ -59,7 +59,10 @@ class GaussianDPMM(nn.Module):
             value = th.tensor(value).float()
 
         if value.ndim == 0:
-            value = value.view((1,) * len(expected_shape)).expand(expected_shape)
+            if name == 'B0':
+                value = th.diag_embed(value.view(1, 1).expand(expected_shape[:2]))
+            else:
+                value = value.view((1,) * len(expected_shape)).expand(expected_shape)
 
         # check the shape
         if value.ndim > len(expected_shape):
@@ -83,8 +86,7 @@ class GaussianDPMM(nn.Module):
 
     def init_var_params(self, x=None):
 
-        # TODO: initialisation is crucial
-        # these params are the same in the natural and in the common form
+        # TODO: initialisation is crucial and should be random
         u = th.ones_like(self.nat_u)
         v = th.ones_like(self.nat_u)
         c = th.ones_like(self.nat_c)
@@ -106,28 +108,6 @@ class GaussianDPMM(nn.Module):
         self.__set_var_params__(u, v, tau, c, n, B)
 
     def __set_var_params__(self, u=None, v=None, tau=None, c=None, n=None, B=None):
-        # TODO: initialisation is crucial and should be random
-        # these params are the same in the natural and in the common form
-        if u is None:
-            u = th.ones_like(self.nat_u)
-
-        if v is None:
-            v = th.ones_like(self.nat_u)
-
-        if c is None:
-            c = th.ones_like(self.nat_c)
-
-        if n is None:
-            n = (self.D+2) * th.ones_like(self.nat_n)
-
-        # var params of emission
-        if tau is None:
-            tau = th.zeros_like(self.nat_tau)
-
-        if B is None:
-            B_eye_val = th.ones(self.K, self.D)
-            B = B_eye_val if self.is_diagonal else th.diag_embed(B_eye_val)
-
         nat_u, nat_v, nat_tau, nat_c, nat_n, nat_B = common_to_natural(u, v, tau, c, n, B, self.is_diagonal)
 
         self.nat_u.data = nat_u
