@@ -9,12 +9,13 @@ from torch.distributions import MultivariateNormal
 class GaussianDPMM(nn.Module):
 
     # TODO: implement tied version
-    def __init__(self, K, D, alphaDP, tau0, c0, n0, B0, is_diagonal):
+    def __init__(self, K, D, alphaDP, tau0, c0, n0, B0, is_diagonal, is_B0_diagonal):
         super().__init__()
 
         self.K = K  # number of mixture components
         self.D = D  # size of output vector
         self.is_diagonal = is_diagonal  # the posterior of the precision is diagonal
+        self.is_B0_diagonal = is_B0_diagonal
 
         # store the prior args
         self.alphaDP = alphaDP
@@ -24,13 +25,13 @@ class GaussianDPMM(nn.Module):
         self.c0 = self.__validate_arg__("c0", c0, (K,), [Positive()])
         self.n0 = self.__validate_arg__("n0", n0, (K,), [GreaterThan(D-1)])
 
-        B0 = th.tensor(B0)
-        if B0.ndim > 2:
-            self.is_B0_diagonal = False
-            self.B0 = self.__validate_arg__("B0", B0, (K, D, D), [PositiveDefinite()])
-        else:
-            self.is_B0_diagonal = True
+        B0 = th.tensor(B0).float()
+        if self.is_B0_diagonal:
             self.B0 = self.__validate_arg__("B0", B0, (K, D), [Positive()])
+        else:
+            if B0.ndim <= 1:
+                B0 = B0 * th.eye(D, D)
+            self.B0 = self.__validate_arg__("B0", B0, (K, D, D), [PositiveDefinite()])
 
         # get the Function associated to this prior params
         self.__update_computation_fucntion__()
@@ -59,10 +60,7 @@ class GaussianDPMM(nn.Module):
             value = th.tensor(value).float()
 
         if value.ndim == 0:
-            if name == 'B0':
-                value = th.diag_embed(value.view(1, 1).expand(expected_shape[:2]))
-            else:
-                value = value.view((1,) * len(expected_shape)).expand(expected_shape)
+            value = value.view((1,) * len(expected_shape)).expand(expected_shape)
 
         # check the shape
         if value.ndim > len(expected_shape):
