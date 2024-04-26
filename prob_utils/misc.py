@@ -30,7 +30,7 @@ def batched_trace_square_mat(mat, diag_coeff=None):
 
 def multidigamma(input:th.Tensor, p):
     d_shape = [1]*input.ndim
-    dvec = th.arange(1, p + 1, dtype=th.float).view(d_shape+[p])
+    dvec = th.arange(1, p + 1, dtype=th.float, device=input.device).view(d_shape+[p])
     aux = input.unsqueeze(-1) + 0.5 * (1 - dvec)
     return th.special.digamma(aux).sum(-1)
 

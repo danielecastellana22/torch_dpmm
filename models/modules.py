@@ -19,19 +19,20 @@ class GaussianDPMM(nn.Module):
 
         # store the prior args
         self.alphaDP = alphaDP
-        self.u0 = self.__validate_arg__('u0', 1, (K,), [Positive()])
-        self.v0 = self.__validate_arg__('v0', alphaDP, (K,), [Positive()])
-        self.tau0 = self.__validate_arg__("tau0", tau0, (K, D), [])
-        self.c0 = self.__validate_arg__("c0", c0, (K,), [Positive()])
-        self.n0 = self.__validate_arg__("n0", n0, (K,), [GreaterThan(D-1)])
+        self.register_buffer("u0", self.__validate_arg__('u0', 1, (K,), [Positive()]))
+        self.register_buffer("v0", self.__validate_arg__('v0', alphaDP, (K,), [Positive()]))
+        self.register_buffer("tau0", self.__validate_arg__("tau0", tau0, (K, D), []))
+        self.register_buffer("c0", self.__validate_arg__("c0", c0, (K,), [Positive()]))
+        self.register_buffer("n0", self.__validate_arg__("n0", n0, (K,), [GreaterThan(D-1)]))
 
         B0 = th.tensor(B0).float()
         if self.is_B0_diagonal:
-            self.B0 = self.__validate_arg__("B0", B0, (K, D), [Positive()])
+            B0 = self.__validate_arg__("B0", B0, (K, D), [Positive()])
         else:
             if B0.ndim <= 1:
                 B0 = B0 * th.eye(D, D)
-            self.B0 = self.__validate_arg__("B0", B0, (K, D, D), [PositiveDefinite()])
+            B0 = self.__validate_arg__("B0", B0, (K, D, D), [PositiveDefinite()])
+        self.register_buffer("B0", B0)
 
         # get the Function associated to this prior params
         self.__update_computation_fucntion__()
