@@ -127,6 +127,15 @@ class GaussianDPMM(nn.Module):
 
         return (p.detach() for p in params)
 
+    def get_num_active_components(self):
+        u, v, tau, c, n, B = natural_to_common(self.nat_u, self.nat_v,
+                                               self.nat_tau, self.nat_c, self.nat_n, self.nat_B, self.is_diagonal)
+
+        sticks = u / (u + v)
+        log_1_minus_sticks = th.log(1 - sticks)
+        r = th.exp(th.cumsum(log_1_minus_sticks, -1) - log_1_minus_sticks + th.log(sticks))
+        return th.sum(r > 0.01).item()
+
     @th.no_grad()
     def get_expected_params(self):
         u, v, tau, c, n, B = natural_to_common(self.nat_u, self.nat_v,
@@ -138,7 +147,6 @@ class GaussianDPMM(nn.Module):
 
         mu = tau
         sigma = (B if not self.is_diagonal else th.diag_embed(B)) / (n - self.D - 1).view(-1, 1, 1)
-
         # TODO: how to select the treshold? 1/100*alph as pyro?
         mask = r > 0.01
         return r[mask], mu[mask], sigma[mask]
@@ -146,10 +154,12 @@ class GaussianDPMM(nn.Module):
     @th.no_grad()
     def get_expected_log_likelihood(self, x):
         r, mu, sigma = self.get_expected_params()
-        # TODO: implement our computation instead of relying on pytorch
+        # TODO: implement our computation instead of relying on pytorch.
+        #  SIGMA CAN BE NOT POSITIVE DEFINITE DUE TO NUMERICAL ERROR
+        sigma = sigma + th.diag_embed(1e-3 * th.ones(sigma.shape[0], self.D))
         exp_loglike = MultivariateNormal(loc=mu, covariance_matrix=sigma).log_prob(x.unsqueeze(1))
-        # TODO: maybe the max should go outside? what about the r?
-        return th.max(exp_loglike,  -1)[0]
+        return exp_loglike
+        # what about the r?
 
 
 if __name__ == '__main__':
