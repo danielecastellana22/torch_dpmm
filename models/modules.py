@@ -1,9 +1,10 @@
 import torch as th
 import torch.nn as nn
 from sklearn.cluster import kmeans_plusplus
+from torch.distributions import MultivariateNormal
 from ..prob_utils.constraints import *
 from .functions import GaussianDPMMFunctionGenerator, natural_to_common, common_to_natural, E_log_x
-from torch.distributions import MultivariateNormal
+from ..prob_utils.misc import log_normalise
 
 
 class GaussianDPMM(nn.Module):
@@ -138,29 +139,30 @@ class GaussianDPMM(nn.Module):
         return th.sum(r > 0.01).item()
 
     @th.no_grad()
-    def get_expected_params(self):
+    def get_expected_params(self, return_log_r=False):
         u, v, tau, c, n, B = natural_to_common(self.nat_u, self.nat_v,
                                                self.nat_tau, self.nat_c, self.nat_n, self.nat_B, self.is_diagonal)
 
         sticks = u / (u + v)
         log_1_minus_sticks = th.log(1 - sticks)
-        r = th.exp(th.cumsum(log_1_minus_sticks, -1) - log_1_minus_sticks + th.log(sticks))
-
+        log_r = th.cumsum(log_1_minus_sticks, -1) - log_1_minus_sticks + th.log(sticks)
         mu = tau
         sigma = (B if not self.is_diagonal else th.diag_embed(B)) / (n - self.D - 1).view(-1, 1, 1)
-        # TODO: how to select the treshold? 1/100*alph as pyro?
-        mask = r > 0.01
-        return r[mask], mu[mask], sigma[mask]
+
+        if return_log_r:
+            return log_r, mu, sigma
+        else:
+            return log_r.exp(), mu, sigma
 
     @th.no_grad()
     def get_expected_log_likelihood(self, x):
-        r, mu, sigma = self.get_expected_params()
+        log_r, mu, sigma = self.get_expected_params(return_log_r=True)
         # TODO: implement our computation instead of relying on pytorch.
         #  SIGMA CAN BE NOT POSITIVE DEFINITE DUE TO NUMERICAL ERROR
         sigma = sigma + th.diag_embed(1e-3 * th.ones(sigma.shape[0], self.D))
         exp_loglike = MultivariateNormal(loc=mu, covariance_matrix=sigma).log_prob(x.unsqueeze(1))
-        return exp_loglike
-        # what about the r?
+        _, logZ = log_normalise(exp_loglike+log_r)
+        return logZ
 
 
 if __name__ == '__main__':
