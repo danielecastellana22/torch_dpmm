@@ -3,86 +3,40 @@ import torch.nn as nn
 from sklearn.cluster import kmeans_plusplus
 from torch.distributions import MultivariateNormal
 from ..prob_utils.constraints import *
-from .functions import GaussianDPMMFunctionGenerator, natural_to_common, common_to_natural, E_log_x
 from ..prob_utils.misc import log_normalise
+from ..prob_utils.conjugate_priors import ConjugatePriorDistribution, StickBreakingPrior
 
 
-class GaussianDPMM(nn.Module):
+class DPMM(nn.Module):
 
-    # TODO: implement tied version
-    def __init__(self, K, D, alphaDP, tau0, c0, n0, B0, is_diagonal, is_B0_diagonal):
+    def __init__(self, K, D, mix_weights_prior_common_params, emission_conj_prior_class: ConjugatePriorDistribution,
+                 emission_conj_prior_common_params: list[th.Tensor]):
         super().__init__()
 
         self.K = K  # number of mixture components
         self.D = D  # size of output vector
-        self.is_diagonal = is_diagonal  # the posterior of the precision is diagonal
-        self.is_B0_diagonal = is_B0_diagonal
 
-        # store the prior args
-        self.alphaDP = alphaDP
-        self.register_buffer("u0", self.__validate_arg__('u0', 1, (K,), [Positive()]))
-        self.register_buffer("v0", self.__validate_arg__('v0', alphaDP, (K,), [Positive()]))
-        self.register_buffer("tau0", self.__validate_arg__("tau0", tau0, (K, D), []))
-        self.register_buffer("c0", self.__validate_arg__("c0", c0, (K,), [Positive()]))
-        self.register_buffer("n0", self.__validate_arg__("n0", n0, (K,), [GreaterThan(D-1)]))
+        # store the prior nat params of the mixture weights
+        mix_weights_prior_common_params = StickBreakingPrior.validate_common_params(mix_weights_prior_common_params)
+        for i, p in enumerate(StickBreakingPrior.common_to_natural(mix_weights_prior_common_params)):
+            self.register_buffer(f'mix_prior_eta_{i}', p)
+            self.register_parameter(f'mix_var_eta_{i}', nn.Parameter(th.empty_like(p)))
 
-        B0 = th.tensor(B0).float()
-        if self.is_B0_diagonal:
-            B0 = self.__validate_arg__("B0", B0, (K, D), [Positive()])
-        else:
-            if B0.ndim <= 1:
-                B0 = B0 * th.eye(D, D)
-            B0 = self.__validate_arg__("B0", B0, (K, D, D), [PositiveDefinite()])
-        self.register_buffer("B0", B0)
+        emission_conj_prior_common_params = emission_conj_prior_class.validate_common_params(emission_conj_prior_common_params)
+        for i, p in enumerate(emission_conj_prior_class.common_to_natural(emission_conj_prior_common_params)):
+            self.register_buffer(f'emission_prior_eta_{i}', p)
+            self.register_parameter(f'emission_var_eta_{i}', nn.Parameter(th.empty_like(p)))
 
         # get the Function associated to this prior params
         self.__update_computation_fucntion__()
 
-        # define the variational parameters
-        # var params of beta (stick-breaking)
-        self.nat_u = th.nn.Parameter(th.empty(K))
-        self.nat_v = th.nn.Parameter(th.empty(K))
-
-        # var params of emission
-        self.nat_tau = th.nn.Parameter(th.empty(K, D))  # mean of mu posterior
-        self.nat_c = th.nn.Parameter(th.empty(K))  # precision coeff. of mu posterior
-
-        self.nat_n = th.nn.Parameter(th.empty(K))  # deg_of_freedom of precision posterior wishart(n,B)
-        self.nat_B = th.nn.Parameter(th.empty(K, D) if is_diagonal else th.empty(K, D, D))  # B matrix of precision posterior wishart(n,B)
         self.init_var_params()
 
     def __update_computation_fucntion__(self):
         self.__dpmm_func__ = GaussianDPMMFunctionGenerator(self.u0, self.v0, self.tau0, self.c0, self.n0, self.B0,
                                                            self.is_diagonal, self.is_B0_diagonal).get_function().apply
 
-    @staticmethod
-    def __validate_arg__(name, value, expected_shape, constraints_list):
 
-        if not isinstance(value, th.Tensor):
-            value = th.tensor(value).float()
-
-        if value.ndim == 0:
-            value = value.view((1,) * len(expected_shape)).expand(expected_shape)
-
-        # check the shape
-        if value.ndim > len(expected_shape):
-            raise ValueError(f'{name} has too many dimensions: we got {value.shape} but we expected {expected_shape}!')
-        elif value.ndim == len(expected_shape)-1:
-            value = value.unsqueeze(0).expand(expected_shape[:1] + tuple([-1]*(len(expected_shape)-1)))
-        elif value.ndim < len(expected_shape)-1:
-            raise ValueError(f'{name} has too few dimensions! We broadcast only along the first dimension:'
-                             f' we got {value.shape} but we expected {expected_shape}!')
-
-        assert value.ndim == len(expected_shape)
-        if value.shape != expected_shape:
-            raise ValueError(f'{name} has the wrong shape: we got {value.shape} but we expected {expected_shape}!')
-
-        # check the constraints
-        for c in constraints_list:
-            if not c(value):
-                raise ValueError(c.message(name, 'Gaussian-DPMM'))
-
-        return value
 
     def init_var_params(self, x=None):
 

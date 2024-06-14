@@ -1,113 +1,25 @@
 import torch as th
 from torch.autograd.function import once_differentiable
 from torch.autograd import Function
-from ..prob_utils import *
-from ..prob_utils.constants import *
-from ..prob_utils.kl_div import *
-from torch.special import digamma
-from torch.linalg import solve, slogdet
+from ..prob_utils.conjugate_priors import ConjugatePriorDistribution, StickBreakingPrior
+from ..prob_utils.misc import log_normalise
 
 
-# computes E_q [log \pi]
-def E_log_pi(u, v):
-    common_factor = digamma(u + v)
-    expected_log_pi = digamma(u) - common_factor  # E_q[log s] (where s is the stick portion)
+class DPMMFunctionGenerator:
 
-    aux = digamma(v) - common_factor
-    expected_log_one_minus_pi = th.cumsum(aux, dim=0) - aux
-
-    return expected_log_pi + expected_log_one_minus_pi
-
-
-# computes E_q [log prec] where prec followd a Wishart distribution
-def E_log_prec(n, B_inv, is_diagonal):
-    D = B_inv.shape[-1]
-    log_det = th.log(B_inv).sum(-1) if is_diagonal else slogdet(B_inv)[1]
-    return multidigamma(0.5 * n, D) + D * LOG_2 + log_det
-
-
-# computes E_q [ log N(x \mid mu, prec^-1]
-def E_log_x(x, tau, c, n, B_inv, is_diagonal):
-    BS, D = x.shape
-    # do the broadcast to consider BS dimension
-    diff = x.unsqueeze(1)-tau.unsqueeze(0)  # has shape BS x K x D
-    B_inv = B_inv.unsqueeze(0).expand((BS,) + B_inv.shape)  # has shape BS x K x ?
-    n = n.unsqueeze(0)
-    c = c.unsqueeze(0)
-    # E_q [(x-mu)^T (cPrec)^-1 (x-mu)] = D/c + (x-mu)^T (nB) (x-mu) = D/c + n (x-mu)^T (nB) (x-mu)
-    E_mahalanobis_dist = D/c + n * batch_mahalanobis_dist(B_inv, diff, is_diagonal)
-    return 0.5 * (- D * LOG_2PI + E_log_prec(n, B_inv, is_diagonal) - E_mahalanobis_dist)
-
-
-@th.no_grad()
-def natural_to_common(nat_u, nat_v, nat_tau, nat_c, nat_n, nat_B, is_diagonal):
-    u = nat_u
-    v = nat_v
-    c = nat_c
-    n = nat_n
-
-    tau = nat_tau / nat_c.unsqueeze(-1)
-    if is_diagonal:
-        B = nat_B - nat_tau**2 / nat_c.view(-1, 1)
-    else:
-        B = nat_B - batch_outer_product(nat_tau, nat_tau) / nat_c.view(-1, 1, 1)
-
-    return u, v, tau, c, n, B
-
-
-@th.no_grad()
-def common_to_natural(u, v, tau, c, n, B, is_diagonal):
-    ''' Convert current posterior params from common to nat form
-    '''
-    nat_u = u
-    nat_v = v
-    nat_c = c
-    nat_n = n
-    nat_tau = tau * c.unsqueeze(-1)
-
-    if is_diagonal:
-        nat_B = B + tau**2 * c.view(-1, 1)
-    else:
-        nat_B = B + batch_outer_product(tau, tau) * c.view(-1, 1, 1)
-
-    return nat_u, nat_v, nat_tau, nat_c, nat_n, nat_B
-
-
-# We use a closure to cache values of priors that do not change during the execution: e.g. the prior params and
-# c0*tau0^2, B0_inv, c0*tau0
-class GaussianDPMMFunctionGenerator:
-
-    # v0 should be alphaDP
-    def __init__(self, u0, v0, tau0, c0, n0, B0, is_B_diagonal, is_B0_diagonal):
-        self.u0 = u0
-        self.v0 = v0
-        self.tau0 = tau0
-        self.c0 = c0
-        self.n0 = n0
-        self.is_B_diagonal = is_B_diagonal
-        self.is_B0_diagonal = is_B0_diagonal
-
-        # reshape B0 in order to match the shape of B
-        if is_B_diagonal == is_B0_diagonal:
-            self.B0 = B0
-        else:
-            self.B0 = th.diag_embed(B0)
-            # the case when B is diagonal and B0 is not is impossible
-
-        # precompute and cache some values
-        self.c0_tau0 = c0.unsqueeze(-1) * tau0
-        tau0_square = tau0 ** 2 if is_B_diagonal else batch_outer_product(tau0, tau0)
-        self.c0_tau0_2 = th.einsum("k,k...->k...", c0, tau0_square)
-        self.B0_inv = 1 / B0 if is_B0_diagonal else th.linalg.inv(B0)
+    def __init__(self, mix_weights_prior_nat_params, emission_prior_class: ConjugatePriorDistribution, emission_prior_nat_params):
+        self.mix_weights_prior_nat_params = mix_weights_prior_nat_params
+        self.emission_prior_class = emission_prior_class
+        self.emission_prior_nat_params = emission_prior_nat_params
 
     def get_function(self):
 
         class GaussianDPMMFunction(Function):
 
             @staticmethod
-            def __dpmm_computation__(x, u, v, tau, c, n, B_inv):
-                pi_contribution = E_log_pi(u, v)
-                data_contribution = E_log_x(x, tau, c, n, B_inv, self.is_B_diagonal)
+            def forward(ctx, data, mix_weights_var_nat_params, emission_var_nat_params):
+                pi_contribution = StickBreakingPrior.expected_log_params(self.mix_weights_prior_nat_params)
+                data_contribution = self.emission_prior_class.expected_data_loglikelihood(data, emission_var_nat_params)
 
                 log_unnorm_r = pi_contribution.unsqueeze(0) + data_contribution
                 log_r, _ = log_normalise(log_unnorm_r)
@@ -115,55 +27,34 @@ class GaussianDPMMFunctionGenerator:
 
                 # compute the elbo
                 elbo = ((r * data_contribution).sum()
-                        - beta_kl_div(u, v, self.u0, self.v0).sum()
-                        - mv_normal_wishart_kl_div(tau, c, n, B_inv, self.tau0, self.c0, self.n0, self.B0_inv,
-                                                   is_V0_diagonal=self.is_B_diagonal,
-                                                   is_V1_diagonal=self.is_B0_diagonal).sum()
-                        + (r.sum(0) * pi_contribution).sum() - (
-                                    r * log_r).sum())  # KL(q(z) || p(z)) where z is the cluster assignment
+                        - StickBreakingPrior.kl_div(mix_weights_var_nat_params,
+                                                    self.mix_weights_prior_nat_params).sum()
+                        - self.emission_prior_class.kl_div(emission_var_nat_params,
+                                                           self.emission_prior_nat_params).sum()
+                        # KL(q(z) || p(z)) where z is the cluster assignment
+                        + (r.sum(0) * pi_contribution).sum() - (r * log_r).sum())
 
-                return r, elbo / th.numel(x)
+                ctx.save_for_backward(r, data, mix_weights_var_nat_params, emission_var_nat_params)
 
-            @staticmethod
-            def __dpmm_natural_update__(x, r):
-                # The natural gradient is related to the full_batch update.
-                # At first, we compute the update for all var params
-                N_k = th.sum(r, dim=0)  # has shape K
-                nat_u_update = self.u0 + N_k
-                nat_v_update = self.v0 + (th.sum(N_k) - th.cumsum(N_k, 0))
-                nat_c_update = self.c0 + N_k
-                nat_n_update = self.n0 + N_k
-
-                nat_tau_update = self.c0_tau0 + th.matmul(r.T, x)
-
-                x_square = x ** 2 if self.is_B_diagonal else batch_outer_product(x, x)
-                r_x_square = th.einsum("bk,bk...->k...", r, x_square.unsqueeze(1))
-                nat_B_update = self.B0 + self.c0_tau0_2 + r_x_square
-                nat_updates = nat_u_update, nat_v_update, nat_tau_update, nat_c_update, nat_n_update, nat_B_update
-
-                return nat_updates
-
-            @staticmethod
-            def forward(ctx, x, *nat_params):
-                u, v, tau, c, n, B = natural_to_common(*nat_params, self.is_B_diagonal)
-                B_inv = 1 / B if self.is_B_diagonal else th.linalg.inv(B)
-                r, elbo = GaussianDPMMFunction.__dpmm_computation__(x, u, v, tau, c, n, B_inv)
-                ctx.save_for_backward(x, r, *nat_params)
-                return r, -elbo
+                return r, elbo / th.numel(data)
 
             @staticmethod
             @once_differentiable
             def backward(ctx, pi_grad, elbo_grad):
-                x, r, *nat_params = ctx.saved_tensors
+                r, data, mix_weights_var_nat_params, emission_var_nat_params = ctx.saved_tensors
 
-                nat_updates = GaussianDPMMFunction.__dpmm_natural_update__(x, r)
+                mix_weights_var_nat_updates = StickBreakingPrior.compute_posterior_nat_params(r)
+                emission_var_nat_updates = self.emission_prior_class.compute_posterior_nat_params(r, data)
+
                 # The natural gradient is the difference between the current value and the new one
                 # We also consider elbo_grad to mimic the backpropagation. It should be always 1.
-                nat_params_grad = tuple((nat_params[i] - nat_updates[i])*elbo_grad for i in range(len(nat_params)))
+                mix_weights_var_nat_grad = [(mix_weights_var_nat_params[i] - mix_weights_var_nat_updates[i]) * elbo_grad
+                                            for i in range(len(mix_weights_var_nat_params))]
+                emission_var_nat_grad = [(emission_var_nat_params[i] - emission_var_nat_updates[i]) * elbo_grad
+                                         for i in range(len(emission_var_nat_params))]
 
-                # there is no gradient for the data x (for now)
-                x_grad = None
-                return (x_grad,) + nat_params_grad
+                # there is no gradient for the data x
+                return None, mix_weights_var_nat_grad, emission_var_nat_grad
 
         return GaussianDPMMFunction
 
