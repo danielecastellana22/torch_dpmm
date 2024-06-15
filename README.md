@@ -4,7 +4,7 @@ We integrate the Variational Inference framework with the autograd functionality
 - in the **forward pass**, we compute the cluster assignment and the elbo given the data and the model parameters;
 - in the **bakcward pass**, we compute the natural gradient of the model parameters.
 
-This allow to train DPMM without changing the training loop (which becomes the same of a neural model):
+This allows to train DPMM without changing the training loop (which becomes the same of a neural model):
 ```
 from torch_dpmm.models import GaussianDPMM
 import torch.optim as optim
@@ -22,3 +22,8 @@ for i in range(num_epochs):
 
 We provide a complete example [here](https://github.com/danielecastellana22/torch_dpmm/blob/main/first_example.ipynb).
 We recommend to download the notebook to view the animations.
+
+
+## To Do
+1. Add Cholesky parametrisation of the full Guassian distributrion to improve numerical stability.
+2. Improve the initialisation of the variational parameter.

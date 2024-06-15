@@ -1,22 +1,25 @@
-from typing import Type
-from ..exp_distributions import ExponentialFamilyDistribution
+from typing import Any, Type, Collection
 import torch as th
+from ..constraints import *
 
 
 class ConjugatePriorDistribution:
 
-    __exp_distr_class__ = None
-    common_params_shape_list = None
-    common_params_constraints_list = None
+    _exp_distr_class = None
+    _theta_names = None
+    _theta_shape_list = None
+    _theta_constraints_list = None
 
     @staticmethod
-    def __validate_params__(name, value, expected_shape, constraints_list):
+    def __validate_params(name: str, value: Any,
+                          expected_shape: Collection[int], constraint: BaseConstraint):
+        expected_shape = tuple(expected_shape)
 
         if not isinstance(value, th.Tensor):
             value = th.tensor(value).float()
 
-        if value.ndim == 0:
-            value = value.view((1,) * len(expected_shape)).expand(expected_shape)
+        #if value.ndim == 0:
+        #    value = value.view((1,) * len(expected_shape)).expand(expected_shape)
 
         # check the shape
         if value.ndim > len(expected_shape):
@@ -31,19 +34,18 @@ class ConjugatePriorDistribution:
         if value.shape != expected_shape:
             raise ValueError(f'{name} has the wrong shape: we got {value.shape} but we expected {expected_shape}!')
 
-        # check the constraints
-        for c in constraints_list:
-            if not c(value):
-                raise ValueError(c.message(name, 'Gaussian-DPMM'))
+        # check the constraint
+        if not constraint(value):
+            raise ValueError(constraint.message(name, 'Gaussian-DPMM'))
 
         return value
 
     @classmethod
-    def validate_common_params(cls, theta: list[th.Tensor]) -> list[th.Tensor]:
+    def validate_common_params(cls, K: int, D: int, theta: list[th.Tensor]) -> list[th.Tensor]:
         out = []
         for i in range(len(theta)):
-            out.append(cls.__validate_params__(f'eta_{i}', theta[i],
-                                               cls.common_params_shape_list[i], cls.common_params_constraints_list[i]))
+            out.append(cls.__validate_params(cls._theta_names[i], theta[i],
+                                             eval(cls._theta_shape_list[i]), eval(cls._theta_constraints_list[i])))
         return out
 
     @classmethod
@@ -116,14 +118,14 @@ class ConjugatePriorDistribution:
 
     @classmethod
     def kl_div(cls, p_eta: list[th.Tensor], q_eta: list[th.Tensor]) -> th.Tensor:
-        return cls.__exp_distr_class__.kl_div(p_eta, q_eta)
+        return cls._exp_distr_class.kl_div(p_eta, q_eta)
 
     @classmethod
     def common_to_natural(cls, theta: list[th.Tensor]) -> list[th.Tensor]:
-        return cls.__exp_distr_class__.common_to_natural(theta)
+        return cls._exp_distr_class.common_to_natural(theta)
 
     @classmethod
     def natural_to_common(cls, eta: list[th.Tensor]) -> list[th.Tensor]:
-        return cls.__exp_distr_class__.natural_to_common(eta)
+        return cls._exp_distr_class.natural_to_common(eta)
 
 

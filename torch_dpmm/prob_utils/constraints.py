@@ -1,7 +1,7 @@
 import torch as th
 from torch.linalg import eigvalsh
 
-__all__ = ['GreaterThan', 'Positive', 'PositiveDefinite']
+__all__ = ['BaseConstraint', 'AnyValue', 'GreaterThan', 'Positive', 'PositiveDefinite']
 
 
 class BaseConstraint:
@@ -11,6 +11,12 @@ class BaseConstraint:
 
     def message(self, param_name, distr_name):
         raise NotImplementedError
+
+
+class AnyValue(BaseConstraint):
+
+    def __call__(self, v):
+        return True
 
 
 class GreaterThan(BaseConstraint):

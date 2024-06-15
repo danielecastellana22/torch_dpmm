@@ -17,6 +17,13 @@ class Mock_Data:
         self.dim = s.shape[1]
 
 
+def get_bnpy_NIW_kl(hmodel):
+    data = Mock_Data(x)
+    LP = hmodel.calc_local_params(data)
+    pi = LP['resp'].copy()
+    SS = hmodel.get_global_suff_stats(data, LP)
+
+
 def get_bnpy_impl(K, D, u, v, alphaDP, tau, c, n, B_inv, tau0, c0, n0, B0_inv):
     post_params = ParamBag(K=K, D=D, m=tau.numpy().copy(), kappa=c.numpy().copy(),
                            nu=n.numpy().copy(), B=B_inv.numpy().copy())
@@ -46,7 +53,7 @@ def get_bnpy_common_to_natural(hmodel):
     hmodel.obsModel.convertPostToNatural()
 
     return (hmodel.obsModel.Post.km, hmodel.obsModel.Post.kappa,
-            hmodel.obsModel.Post.nu, hmodel.obsModel.Post.Bnat)
+            hmodel.obsModel.Post.Bnat, hmodel.obsModel.Post.nu)
 
 
 def get_bnpy_natural_to_common(hmodel):
@@ -58,7 +65,7 @@ def get_bnpy_natural_to_common(hmodel):
     hmodel.obsModel.convertPostToCommon()
 
     return (hmodel.obsModel.Post.m, hmodel.obsModel.Post.kappa,
-            hmodel.obsModel.Post.nu, hmodel.obsModel.Post.B)
+            hmodel.obsModel.Post.B, hmodel.obsModel.Post.nu)
 
 
 def get_bnpy_train_it_results(hmodel, x, lr):
@@ -66,22 +73,22 @@ def get_bnpy_train_it_results(hmodel, x, lr):
     LP = hmodel.calc_local_params(data)
     pi = LP['resp'].copy()
     SS = hmodel.get_global_suff_stats(data, LP)
-    elbo = hmodel.calc_evidence(data)
+    elbo = hmodel.calc_evidence(data=data, LP=LP, SS=SS)
     hmodel.obsModel.convertPostToNatural()
     prev_nat_values = (hmodel.allocModel.eta1.copy(), hmodel.allocModel.eta0.copy(),
                        hmodel.obsModel.Post.km.copy(), hmodel.obsModel.Post.kappa.copy(),
-                       hmodel.obsModel.Post.nu.copy(), hmodel.obsModel.Post.Bnat.copy())
+                       hmodel.obsModel.Post.Bnat.copy(), hmodel.obsModel.Post.nu.copy())
     
     new_nu, new_Bnat, new_km, new_kappa = hmodel.obsModel.calcNaturalPostParams(SS)
-    emission_nat_updates = (new_km, new_kappa, new_nu, new_Bnat)
+    emission_nat_updates = (new_km, new_kappa, new_Bnat, new_nu)
     hmodel.update_global_params(SS, rho=lr)
     
     new_nat_values = (hmodel.allocModel.eta1.copy(), hmodel.allocModel.eta0.copy(),
                        hmodel.obsModel.Post.km.copy(), hmodel.obsModel.Post.kappa.copy(),
-                       hmodel.obsModel.Post.nu.copy(), hmodel.obsModel.Post.Bnat.copy())
+                       hmodel.obsModel.Post.Bnat.copy(), hmodel.obsModel.Post.nu.copy())
     
     new_comm_values = (hmodel.allocModel.eta1.copy(), hmodel.allocModel.eta0.copy(),
                        hmodel.obsModel.Post.m.copy(), hmodel.obsModel.Post.kappa.copy(),
-                       hmodel.obsModel.Post.nu.copy(), hmodel.obsModel.Post.B.copy())
+                       hmodel.obsModel.Post.B.copy(), hmodel.obsModel.Post.nu.copy())
     
     return (pi, elbo, new_comm_values, prev_nat_values, new_nat_values, emission_nat_updates)

@@ -8,7 +8,7 @@ class ExponentialFamilyDistribution:
     # x: a sample of the distribution
 
     @classmethod
-    def __h_x__(cls, x: list[th.Tensor]) -> th.Tensor:
+    def _h_x(cls, x: list[th.Tensor]) -> th.Tensor:
         """ The base measure h(x).
 
         Args:
@@ -20,7 +20,7 @@ class ExponentialFamilyDistribution:
         raise NotImplementedError('Should be implemented in subclasses!')
 
     @classmethod
-    def __A_eta__(cls, eta: list[th.Tensor]) -> th.Tensor:
+    def _A_eta(cls, eta: list[th.Tensor]) -> th.Tensor:
         """ The log-partition function A(eta).
 
         Args:
@@ -32,7 +32,7 @@ class ExponentialFamilyDistribution:
         raise NotImplementedError('Should be implemented in subclasses!')
 
     @classmethod
-    def __T_x__(cls, x: list[th.Tensor], idx: int = None) -> list[th.Tensor] | th.Tensor:
+    def _T_x(cls, x: list[th.Tensor], idx: int = None) -> list[th.Tensor] | th.Tensor:
         """ The sufficient statistics T(x). If idx is not None, we return only the statistic at in position idx.
 
         Args:
@@ -101,5 +101,5 @@ class ExponentialFamilyDistribution:
             if p_eta[i].ndim > 1:
                 term = th.sum(term, list(range(1, p_eta[i].ndim)))
             div += term
-        div += -cls.__A_eta__(p_eta) + cls.__A_eta__(q_eta)
+        div += -cls._A_eta(p_eta) + cls._A_eta(q_eta)
         return div
