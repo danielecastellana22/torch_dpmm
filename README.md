@@ -19,5 +19,6 @@ for i in range(num_epochs):
         optimiser.step()
 ```
 
+
 We provide a complete example [here](https://github.com/danielecastellana22/torch_dpmm/blob/main/first_example.ipynb).
 We recommend to download the notebook to view the animations.
