@@ -1,7 +1,9 @@
 import torch as th
+from typing import Optional, Union
+
 
 __all__ = ['my_scatter_nd', 'log_normalise', 'batched_trace_square_mat', 'multidigamma',
-           'batch_mahalanobis_dist', 'batch_outer_product']
+           'batch_mahalanobis_dist', 'batch_outer_product', 'batch_cholesky_update']
 
 def my_scatter_nd(data, idx_tensor, shape):
     return th.sparse_coo_tensor(idx_tensor, data, shape).coalesce().to_dense().to(data.device)
@@ -53,45 +55,57 @@ def batch_outer_product(a, b):
     return th.einsum('...aj,...bj->...ab', a.unsqueeze(-1), b.unsqueeze(-1))
 
 
-if __name__ == '__main__':
-    BS, K, D = 100, 20, 4
-    # test multidigamma
-    from torch.distributions.wishart import _mvdigamma
-    for p in range(2, 12):
-        v = p + 10*th.rand(BS, D)
-        my_val = multidigamma(v, p)
-        torch_val = _mvdigamma(v, p)
-        assert th.all(th.isclose(my_val, torch_val)), "mutligamma fails"
+def batch_cholesky_update(L: th.Tensor, x: th.Tensor,  beta: Optional[th.Tensor | float] = 1.0) -> th.Tensor:
+    '''
+    This function computes the Cholesky factor of (LL^T + beta*xx^T). It supports batch updates.
+    The code is mostly taken from https://brentyi.github.io/fannypack/utils/potpourri/#fannypack.utils.cholupdate
+    Args:
+        L: tensors of size (*, D, D) which contains batched Cholesky facotrs.
+        beta: tensors of size * which contains the weights for the updates.
+        x: tensors of size (*, D)
 
-    # test batch mahalanobis
-    from torch.distributions.multivariate_normal import _batch_mahalanobis
+    Returns:
+        (th.Tensor): The Cholesky factor of (LL^T + beta*xx^T).
+    '''
+    # Expected shapes: (*, dim, dim) and (*, dim)
+    batch_dims = L.shape[:-2]
+    matrix_dim = x.shape[-1]
+    assert x.shape[:-1] == batch_dims
+    assert matrix_dim == L.shape[-1] == L.shape[-2]
 
-    # diagonal case
-    M = 1 + 5 * th.rand(K, D)
-    v = th.randn(BS, K, D)
-    my_val = batch_mahalanobis_dist(M.unsqueeze(0), v, is_M_diagonal=True)
-    torch_val = _batch_mahalanobis(th.diag_embed(1/M.sqrt()), v)
-    assert th.all(th.isclose(my_val, torch_val)), "diagonal batch_mahalanobis fails"
+    # Flatten batch dimensions, and clone for tensors we need to mutate
+    L = L.reshape((-1, matrix_dim, matrix_dim))
+    x = x.reshape((-1, matrix_dim)).clone()
+    L_out_cols = []
 
-    # full case (stable)
-    a =  th.rand(K, D, D)
-    M = th.einsum('...ij,...kj->...ik', a, a) + 5 * th.diag_embed(th.ones(K, D))
-    l = th.linalg.cholesky(M)
-    M_inv = th.linalg.inv(M)
-    v = th.randn(BS, K, D)
-    my_val = batch_mahalanobis_dist(M_inv.unsqueeze(0), v, is_M_diagonal=False)
-    torch_val = _batch_mahalanobis(l, v)
-    assert th.all(th.isclose(my_val, torch_val)), "full batch_mahalanobis fails"
+    sign_out: Union[float, th.Tensor]
 
-    # full case (stable) multiple batch dimensin
-    a = th.rand(K, K, D, D)
-    M = th.einsum('...ij,...kj->...ik', a, a) + 5 * th.diag_embed(th.ones(K, K, D))
-    l = th.linalg.cholesky(M)
-    M_inv = th.linalg.inv(M)
-    v = th.randn(BS, K, K, D)
-    my_val = batch_mahalanobis_dist(M_inv.unsqueeze(0), v, is_M_diagonal=False)
-    torch_val = _batch_mahalanobis(l, v)
-    assert th.all(th.isclose(my_val, torch_val)), "full batch_mahalanobis fails"
+    if isinstance(beta, float):
+        beta = th.tensor(beta, device=x.device)
 
-    # TODO: test batch_outer_product
-    # TODO: test batched_trace_sqaure_mat
+    x = x * th.sqrt(th.abs(beta))
+    sign_out = th.sign(beta)
+
+    # Cholesky update; mostly copied from Wikipedia:
+    # https://en.wikipedia.org/wiki/Cholesky_decomposition
+    for k in range(matrix_dim):
+        r = th.sqrt(L[:, k, k] ** 2 + sign_out * x[:, k] ** 2)
+        c = (r / L[:, k, k])[:, None]
+        s = (x[:, k] / L[:, k, k])[:, None]
+
+        # We build output column-by-column to avoid in-place modification errors
+        L_out_col = th.zeros_like(L[:, :, k])
+        L_out_col[:, k] = r
+        L_out_col[:, k + 1:] = (L[:, k + 1:, k] + sign_out * s * x[:, k + 1:]) / c
+        L_out_cols.append(L_out_col)
+
+        # We clone x at each iteration, also to avoid in-place modification errors
+        x_next = x.clone()
+        x_next[:, k + 1:] = c * x[:, k + 1:] - s * L_out_col[:, k + 1:]
+        x = x_next
+
+    # Stack columns together
+    L_out = th.stack(L_out_cols, dim=2)
+
+    # Unflatten batch dimensions and return
+    return L_out.reshape(batch_dims + (matrix_dim, matrix_dim))

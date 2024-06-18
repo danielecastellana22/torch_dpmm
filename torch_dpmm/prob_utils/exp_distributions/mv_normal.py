@@ -86,14 +86,14 @@ class BaseNIW(ExponentialFamilyDistribution, ABC):
             return -0.5 * D/lam - 0.5 * nu * cls._trace_M(cls._inv_M_v_vT(Phi, mu0))
         elif idx == 2:
             inv = cls._inv_M(Phi)
-            return -0.5 * nu.view(nu.shape + (1,) * (inv.ndim - nu.ndim)) * cls._inv_M(Phi)
+            return -0.5 * nu.view(nu.shape + (1,) * (inv.ndim - nu.ndim)) * inv
         elif idx == 3:
             return -0.5 * cls._log_det(Phi) + 0.5 * D * LOG_2 + 0.5 * multidigamma(0.5 * nu, D)
         else:
             inv = cls._inv_M(Phi)
             return [nu.unsqueeze(-1) * cls._inv_M_v(Phi, mu0),
                     -0.5 * D / lam - 0.5 * nu * cls._trace_M(cls._inv_M_v_vT(Phi, mu0)),
-                    -0.5 * nu.view(nu.shape + (1,) * (inv.ndim - nu.ndim)) * cls._inv_M(Phi),
+                    -0.5 * nu.view(nu.shape + (1,) * (inv.ndim - nu.ndim)) * inv,
                     -0.5 * cls._log_det(Phi) + 0.5 * D * LOG_2 + 0.5 * multidigamma(0.5 * nu, D)]
 
 
@@ -188,4 +188,6 @@ class DiagonalNIW(BaseNIW):
         return [eta_1, eta_2, eta_3, eta_4]
 
 
-# TODO: implement cholesky parametrization of full covariance matrix to improve stability
+# TODO: implement cholesky parametrization of full covariance matrix to improve stability.
+
+# TODO: maybe its reasonable to implement also LKJ prior
