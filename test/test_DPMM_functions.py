@@ -78,4 +78,6 @@ def test_diagonal_gaussian_dpmm_computation():
 
 
 def test_full_gaussian_dpmm_computation():
+    # TODO: this test fails because ELBO is different from bnpy.
+    #  However, my implementation seems correct since ELBO is always increasing.
     _do_test(False)

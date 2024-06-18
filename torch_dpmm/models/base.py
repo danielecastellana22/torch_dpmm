@@ -103,46 +103,29 @@ class DPMM(nn.Module):
     def _get_init_vals_emission_var_eta(self, x):
         raise NotImplementedError('This should be implmented in the sublcasses!')
 
-
     @th.no_grad()
     def get_var_params(self):
-        params = natural_to_common(self.nat_u, self.nat_v, self.nat_tau, self.nat_c, self.nat_n, self.nat_B,
-                                   self.is_diagonal)
+        params = StickBreakingPrior.natural_to_common(self.mix_weights_var_eta) + \
+                 self.emission_distr_class.natural_to_common(self.emission_var_eta)
 
         return (p.detach() for p in params)
 
+    @th.no_grad()
     def get_num_active_components(self):
-        u, v, tau, c, n, B = natural_to_common(self.nat_u, self.nat_v,
-                                               self.nat_tau, self.nat_c, self.nat_n, self.nat_B, self.is_diagonal)
-
-        sticks = u / (u + v)
-        log_1_minus_sticks = th.log(1 - sticks)
-        r = th.exp(th.cumsum(log_1_minus_sticks, -1) - log_1_minus_sticks + th.log(sticks))
+        r = StickBreakingPrior.expected_params(self.mix_weights_var_eta)[0]
         return th.sum(r > 0.01).item()
 
     @th.no_grad()
     def get_expected_params(self, return_log_r=False):
-        u, v, tau, c, n, B = natural_to_common(self.nat_u, self.nat_v,
-                                               self.nat_tau, self.nat_c, self.nat_n, self.nat_B, self.is_diagonal)
+        r = StickBreakingPrior.expected_params(self.mix_weights_var_eta)[0]
+        expected_emission_params = self.emission_distr_class.expected_params(self.emission_var_eta)
 
-        sticks = u / (u + v)
-        log_1_minus_sticks = th.log(1 - sticks)
-        log_r = th.cumsum(log_1_minus_sticks, -1) - log_1_minus_sticks + th.log(sticks)
-        mu = tau
-        sigma = (B if not self.is_diagonal else th.diag_embed(B)) / (n - self.D - 1).view(-1, 1, 1)
-
-        if return_log_r:
-            return log_r, mu, sigma
-        else:
-            return log_r.exp(), mu, sigma
+        return r, expected_emission_params
 
     @th.no_grad()
     def get_expected_log_likelihood(self, x):
-        log_r, mu, sigma = self.get_expected_params(return_log_r=True)
-        # TODO: implement our computation instead of relying on pytorch.
-        #  SIGMA CAN BE NOT POSITIVE DEFINITE DUE TO NUMERICAL ERROR
-        sigma = sigma + th.diag_embed(1e-3 * th.ones(sigma.shape[0], self.D))
-        exp_loglike = MultivariateNormal(loc=mu, covariance_matrix=sigma).log_prob(x.unsqueeze(1))
-        _, logZ = log_normalise(exp_loglike+log_r)
+        log_r = StickBreakingPrior.expected_log_params(self.mix_weights_var_eta)
+        exp_data_loglike = self.emission_distr_class.expected_data_loglikelihood(x, self.emission_var_eta)
+        _, logZ = log_normalise(exp_data_loglike+log_r)
         return logZ
 
