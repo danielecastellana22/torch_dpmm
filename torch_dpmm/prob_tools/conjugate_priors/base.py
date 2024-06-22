@@ -102,16 +102,16 @@ class ConjugatePriorDistribution:
         raise NotImplementedError('Should be implemented in subclasses!')
 
     @classmethod
-    def compute_posterior_nat_params(cls, assignments: th.Tensor, obs_data: th.Tensor) -> list[th.Tensor]:
+    def compute_posterior_suff_stats(cls, assignments: th.Tensor, obs_data: th.Tensor) -> list[th.Tensor]:
         """
-        Compute the natural parameters of the posterior given the observed data.
+        Compute the sufficient statistics of the posterior given the observed data.
         The assignments are needed since we consider K distribution togethers to speed up the computation.
         Args:
             assignments (th.Tensor): the assignment of the observed data to the K distributions.
             obs_data (th.Tensor): the observed data.
 
         Returns:
-            list[th.Tensor]: a list containing the posterior natural parameters.
+            list[th.Tensor]: a list containing the sufficient statistics for the natural parameters' posterior.
 
         """
         raise NotImplementedError('Should be implemented in subclasses!')

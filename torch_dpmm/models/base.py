@@ -5,6 +5,7 @@ from torch_dpmm.prob_tools.utils import log_normalise
 from torch_dpmm.prob_tools.conjugate_priors import ConjugatePriorDistribution, StickBreakingPrior
 from torch.autograd.function import once_differentiable
 from torch.autograd import Function
+from torch_dpmm.debug_mode import _DEBUG_MODE
 
 
 class DPMMFunction(Function):
@@ -40,10 +41,18 @@ class DPMMFunction(Function):
         prior_eta = ctx.prior_eta
         r, data, *var_eta = ctx.saved_tensors
 
-        var_eta_suff_stasts = StickBreakingPrior.compute_posterior_nat_params(r) + \
-                      emission_distr_class.compute_posterior_nat_params(r, data)
+        var_eta_suff_stasts = StickBreakingPrior.compute_posterior_suff_stats(r) + \
+                              emission_distr_class.compute_posterior_suff_stats(r, data)
 
         var_eta_updates = [prior_eta[i] + var_eta_suff_stasts[i] for i in range(len(prior_eta))]
+
+        if _DEBUG_MODE:
+            import sys
+            K, D = r.shape[-1], data.shape[-1]
+            sbp_updates = var_eta_updates[:2]
+            emiss_updates = var_eta_updates[2:]
+            StickBreakingPrior.validate_common_params(K, D, StickBreakingPrior.natural_to_common(sbp_updates))
+            emission_distr_class.validate_common_params(K, D, emission_distr_class.natural_to_common(emiss_updates))
 
         # The natural gradient is the difference between the current value and the new one
         # We also consider elbo_grad to mimic the backpropagation. It should be always 1.

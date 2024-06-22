@@ -29,7 +29,7 @@ class StickBreakingPrior(ConjugatePriorDistribution):
         return [expected_log_pi + expected_log_one_minus_pi]
 
     @classmethod
-    def compute_posterior_nat_params(cls, assignments, obs_data=None) -> list[th.Tensor]:
+    def compute_posterior_suff_stats(cls, assignments, obs_data=None) -> list[th.Tensor]:
         assert obs_data is None
         N_k = th.sum(assignments, dim=0)  # has shape K
         return [N_k, (th.sum(N_k) - th.cumsum(N_k, 0))]

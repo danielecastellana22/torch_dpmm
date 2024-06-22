@@ -44,7 +44,7 @@ class FullINIWPrior(BaseNIWPrior):
         return [tau, exp_Sigma]
 
     @classmethod
-    def compute_posterior_nat_params(cls, assignments, obs_data) -> list[th.Tensor]:
+    def compute_posterior_suff_stats(cls, assignments, obs_data) -> list[th.Tensor]:
         N_k = th.sum(assignments, dim=0)  # has shape K
         mean_obs_data = th.matmul(assignments.T, obs_data)
         cov_obs_data = th.einsum("bk,bk...->k...",
@@ -68,7 +68,7 @@ class DiagonalNIWPrior(BaseNIWPrior):
         return [tau, exp_Sigma]
 
     @classmethod
-    def compute_posterior_nat_params(cls, assignments, obs_data) -> list[th.Tensor]:
+    def compute_posterior_suff_stats(cls, assignments, obs_data) -> list[th.Tensor]:
         N_k = th.sum(assignments, dim=0)  # has shape K
         mean_obs_data = th.matmul(assignments.T, obs_data)
         cov_obs_data = th.einsum("bk,bk...->k...", assignments, (obs_data**2).unsqueeze(1))
