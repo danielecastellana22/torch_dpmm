@@ -1,7 +1,7 @@
 import torch as th
 from .utils.bnpy_test import *
 from .utils.misc import *
-from torch_dpmm.prob_utils.conjugate_priors import StickBreakingPrior, DiagonalNIWPrior, FullINIWPrior
+from torch_dpmm.prob_tools.conjugate_priors import StickBreakingPrior, DiagonalNIWPrior, FullINIWPrior
 th.manual_seed(1234)
 
 

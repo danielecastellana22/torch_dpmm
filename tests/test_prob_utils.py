@@ -1,5 +1,5 @@
 import torch as th
-from torch_dpmm.prob_utils.misc import *
+from torch_dpmm.prob_tools.utils import *
 
 BS, K, D = 100, 20, 4
 

@@ -1,8 +1,8 @@
 from typing import Type
 import torch as th
 import torch.nn as nn
-from torch_dpmm.prob_utils.misc import log_normalise
-from torch_dpmm.prob_utils.conjugate_priors import ConjugatePriorDistribution, StickBreakingPrior
+from torch_dpmm.prob_tools.utils import log_normalise
+from torch_dpmm.prob_tools.conjugate_priors import ConjugatePriorDistribution, StickBreakingPrior
 from torch.autograd.function import once_differentiable
 from torch.autograd import Function
 
@@ -116,7 +116,7 @@ class DPMM(nn.Module):
         return th.sum(r > 0.01).item()
 
     @th.no_grad()
-    def get_expected_params(self, return_log_r=False):
+    def get_expected_params(self):
         r = StickBreakingPrior.expected_params(self.mix_weights_var_eta)[0]
         expected_emission_params = self.emission_distr_class.expected_params(self.emission_var_eta)
 

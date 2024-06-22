@@ -1,7 +1,7 @@
 from abc import ABC
 import torch as th
 from .base import ExponentialFamilyDistribution
-from ..misc import *
+from ..utils import *
 from ..constants import *
 
 

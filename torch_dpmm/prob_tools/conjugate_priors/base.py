@@ -105,7 +105,7 @@ class ConjugatePriorDistribution:
     def compute_posterior_nat_params(cls, assignments: th.Tensor, obs_data: th.Tensor) -> list[th.Tensor]:
         """
         Compute the natural parameters of the posterior given the observed data.
-        The assignments is useful since we consider K distribution togethers to speed up the computation.
+        The assignments are needed since we consider K distribution togethers to speed up the computation.
         Args:
             assignments (th.Tensor): the assignment of the observed data to the K distributions.
             obs_data (th.Tensor): the observed data.

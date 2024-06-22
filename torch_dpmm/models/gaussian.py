@@ -1,6 +1,6 @@
 import torch as th
 from .base import DPMM
-from torch_dpmm.prob_utils.conjugate_priors import FullINIWPrior, DiagonalNIWPrior
+from torch_dpmm.prob_tools.conjugate_priors import FullINIWPrior, DiagonalNIWPrior
 from sklearn.cluster import kmeans_plusplus
 
 

@@ -1,8 +1,8 @@
 import torch as th
 from torch.distributions import Beta as th_Beta
 from torch.distributions import kl_divergence
-from torch_dpmm.prob_utils.exp_distributions import Beta, FullNIW, DiagonalNIW
-from torch_dpmm.prob_utils.misc import  batched_trace_square_mat, multidigamma, batch_mahalanobis_dist
+from torch_dpmm.prob_tools.exp_distributions import Beta, FullNIW, DiagonalNIW
+from torch_dpmm.prob_tools.utils import  batched_trace_square_mat, multidigamma, batch_mahalanobis_dist
 
 
 B, K, D = 100, 20, 4

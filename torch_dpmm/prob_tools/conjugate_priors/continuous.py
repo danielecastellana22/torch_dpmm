@@ -2,7 +2,7 @@ from abc import ABC
 import torch as th
 from .base import ConjugatePriorDistribution
 from ..exp_distributions import FullNIW, DiagonalNIW
-from ..misc import batch_outer_product
+from ..utils import batch_outer_product
 from ..constants import *
 
 
