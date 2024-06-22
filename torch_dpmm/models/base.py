@@ -124,7 +124,7 @@ class DPMM(nn.Module):
 
     @th.no_grad()
     def get_expected_log_likelihood(self, x):
-        log_r = StickBreakingPrior.expected_log_params(self.mix_weights_var_eta)
+        log_r = StickBreakingPrior.expected_log_params(self.mix_weights_var_eta)[0]
         exp_data_loglike = self.emission_distr_class.expected_data_loglikelihood(x, self.emission_var_eta)
         _, logZ = log_normalise(exp_data_loglike+log_r)
         return logZ
