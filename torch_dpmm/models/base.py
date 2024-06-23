@@ -101,14 +101,18 @@ class DPMM(nn.Module):
                                   self.mix_weights_prior_eta + self.emission_prior_eta,  # concatenate the eta lists
                                   *(self.mix_weights_var_eta + self.emission_var_eta))  # concatenate the eta lists
 
-    def init_var_params(self, x=None):
-        for p in self.mix_weights_var_eta:
-            nn.init.ones_(p)
-        init_v = self._get_init_vals_emission_var_eta(x)
-        for i, p in enumerate(self.emission_var_eta):
-            p.data = init_v[i]
+    def init_var_params(self, x=None, mask=None):
+        if mask is None:
+            mask = th.ones(self.K, dtype=th.bool, device=self.mix_weights_var_eta[0].device)
 
-    def _get_init_vals_emission_var_eta(self, x):
+        for p in self.mix_weights_var_eta:
+            p.data[mask] = 1
+
+        init_v = self._get_init_vals_emission_var_eta(x, mask)
+        for i, p in enumerate(self.emission_var_eta):
+            p.data[mask] = init_v[i]
+
+    def _get_init_vals_emission_var_eta(self, x, mask):
         raise NotImplementedError('This should be implmented in the sublcasses!')
 
     @th.no_grad()

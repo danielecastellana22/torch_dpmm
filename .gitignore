@@ -2,3 +2,4 @@
 !.gitignore
 **__pycache__
 /debug_scripts/debug_example.py
+requirements.txt
