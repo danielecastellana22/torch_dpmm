@@ -74,27 +74,31 @@ class DPMM(nn.Module):
         # store the prior nat params of the mixture weights and create the variational parameters
         mix_weights_prior_theta = CategoricalSBP.validate_common_params(K, D, [1, alphaDP])
         self.mix_weights_var_eta = []
-        self.mix_weights_prior_eta = []
         for i, p in enumerate(CategoricalSBP.common_to_natural(mix_weights_prior_theta)):
             b_name = f'mix_prior_eta_{i}'
             p_name = f'mix_var_eta_{i}'
             self.register_buffer(b_name, p.contiguous())
             self.register_parameter(p_name, nn.Parameter(th.empty_like(p)))
-            self.mix_weights_prior_eta.append(self.get_buffer(b_name))
             self.mix_weights_var_eta.append(self.get_parameter(p_name))
 
         emission_prior_theta = emission_distr_class.validate_common_params(K, D, emission_prior_theta)
         self.emission_var_eta = []
-        self.emission_prior_eta = []
         for i, p in enumerate(emission_distr_class.common_to_natural(emission_prior_theta)):
             b_name = f'emission_prior_eta_{i}'
             p_name = f'emission_var_eta_{i}'
             self.register_buffer(b_name, p.contiguous())
             self.register_parameter(p_name, nn.Parameter(th.empty_like(p)))
-            self.emission_prior_eta.append(self.get_buffer(b_name))
             self.emission_var_eta.append(self.get_parameter(p_name))
 
         self.init_var_params()
+
+    @property
+    def mix_weights_prior_eta(self):
+        return [self.get_buffer(f'mix_prior_eta_{i}') for i in range(len(self.mix_weights_var_eta))]
+
+    @property
+    def emission_prior_eta(self):
+        return [self.get_buffer(f'emission_prior_eta_{i}') for i in range(len(self.emission_var_eta))]
 
     def forward(self, x):
         return DPMMFunction.apply(x, self.emission_distr_class,

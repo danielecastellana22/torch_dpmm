@@ -11,9 +11,9 @@ def _get_gaussian_init_vals(x, D, mask, v_c=1, v_n=1):
 
     # compute initialisation for tau
     if x is None:
-        tau =  th.zeros([K, D], device=mask.device)
+        tau = th.zeros([K, D], device=mask.device)
     else:
-        x_np = x.detach().numpy()
+        x_np = x.detach().cpu().numpy()
         # initialisation makes the difference: we should cover the input space
         if x_np.shape[0] > 3 * K:
             # there are enough sample to init all K clusters
