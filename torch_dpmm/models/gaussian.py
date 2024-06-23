@@ -23,9 +23,8 @@ def _get_gaussian_init_vals(x, D, mask, v_c=1, v_n=1):
             # there are few samples
             to_init = int(x_np.shape[0] / 3)
             mean_np, _ = kmeans_plusplus(x_np, to_init)
-            kmeans_init_mask = th.logical_and(mask, th.cumsum(mask, dim=0) <= to_init)
             tau = th.zeros([K, D], device=mask.device)
-            tau[kmeans_init_mask] = th.tensor(mean_np, device=mask.device)
+            tau[:to_init] = th.tensor(mean_np, device=mask.device)
 
     # compute initialisation for B
     B = th.tensor(1.0, device=mask.device)
