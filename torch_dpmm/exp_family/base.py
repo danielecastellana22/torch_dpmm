@@ -23,8 +23,12 @@ class ExponentialFamilyDistribution:
         if not isinstance(value, th.Tensor):
             value = th.tensor(value).float()
 
-        #if value.ndim == 0:
-        #    value = value.view((1,) * len(expected_shape)).expand(expected_shape)
+        if value.ndim == 0:
+            if isinstance(constraint, PositiveDefinite):
+                value = value.view((1,) * len(expected_shape[:-1])).expand(expected_shape[:-1])
+                value = th.diag_embed(value)
+            else:
+                value = value.view((1,) * len(expected_shape)).expand(expected_shape)
 
         # check the shape
         if value.ndim > len(expected_shape):
