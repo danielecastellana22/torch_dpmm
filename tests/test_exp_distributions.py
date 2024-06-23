@@ -1,8 +1,8 @@
 import torch as th
 from torch.distributions import Beta as th_Beta, MultivariateNormal
 from torch.distributions import kl_divergence
-from torch_dpmm.prob_tools.exp_family import Beta, FullNIW, DiagonalNIW, SingleNIW, SphericalNormal
-from torch_dpmm.prob_tools.utils import  batched_trace_square_mat, multidigamma
+from torch_dpmm.exp_family import Beta, FullNIW, DiagonalNIW, SingleNIW, SphericalNormal
+from torch_dpmm.utils import  batched_trace_square_mat, multidigamma
 
 
 B, K, D = 100, 20, 4

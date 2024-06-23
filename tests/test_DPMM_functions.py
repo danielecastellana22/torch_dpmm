@@ -2,7 +2,7 @@ import torch as th
 th.manual_seed(1234)
 from .utils.misc import *
 from torch_dpmm.models.base import DPMMFunction
-from torch_dpmm.prob_tools.bayesian import CategoricalSBP, DiagonalNIWPrior, FullINIWPrior
+from torch_dpmm.bayesian_distributions import CategoricalSBP, DiagonalNIWPrior, FullINIWPrior
 
 
 def _do_test(is_diagonal):

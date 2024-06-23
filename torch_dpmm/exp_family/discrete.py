@@ -1,6 +1,8 @@
 import torch as th
 from .base import ExponentialFamilyDistribution
 
+__all__ = ['Beta']
+
 
 class Beta(ExponentialFamilyDistribution):
 

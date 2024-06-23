@@ -1,7 +1,7 @@
 import torch as th
 
-
 __all__ = ['my_scatter_nd', 'log_normalise', 'batched_trace_square_mat', 'multidigamma', 'batch_outer_product']
+
 
 def my_scatter_nd(data, idx_tensor, shape):
     return th.sparse_coo_tensor(idx_tensor, data, shape).coalesce().to_dense().to(data.device)

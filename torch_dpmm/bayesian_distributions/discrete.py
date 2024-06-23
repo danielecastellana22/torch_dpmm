@@ -1,8 +1,8 @@
-from typing import Type
 import torch as th
 from .base import BayesianDistribution
-from ..exp_family import Beta
-from ..constraints import *
+from torch_dpmm.exp_family import Beta
+
+__all__ = ['CategoricalSBP']
 
 
 class CategoricalSBP(BayesianDistribution):

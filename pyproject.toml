@@ -1,6 +1,6 @@
 [project]
 name = "torch_dpmm"
-version = "0.0.1"
+version = "0.0.2"
 authors = [
   { name="Daniele Castellana", email="danielecastellana22@gmail.com" },
 ]
@@ -21,6 +21,3 @@ dependencies = [
 
 [project.urls]
 Homepage = "https://github.com/danielecastellana22/torch_dp"
-
-[tool.setuptools]
-packages = ['torch_dpmm']

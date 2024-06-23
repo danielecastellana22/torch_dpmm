@@ -1,6 +1,7 @@
-from typing import Any, Type, Collection
 import torch as th
-from torch_dpmm.prob_tools.exp_family import ExponentialFamilyDistribution
+from torch_dpmm.exp_family import ExponentialFamilyDistribution
+
+__all__ = ['BayesianDistribution']
 
 
 class BayesianDistribution:

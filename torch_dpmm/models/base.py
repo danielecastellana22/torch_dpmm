@@ -1,11 +1,11 @@
 from typing import Type
 import torch as th
 import torch.nn as nn
-from torch_dpmm.prob_tools.utils import log_normalise
-from torch_dpmm.prob_tools.bayesian import BayesianDistribution, CategoricalSBP
+from torch_dpmm.utils.misc import log_normalise
+from torch_dpmm.bayesian_distributions import BayesianDistribution, CategoricalSBP
 from torch.autograd.function import once_differentiable
 from torch.autograd import Function
-from torch_dpmm.debug_mode import _DEBUG_MODE
+from torch_dpmm import _DEBUG_MODE
 
 
 class DPMMFunction(Function):
@@ -47,7 +47,6 @@ class DPMMFunction(Function):
         var_eta_updates = [prior_eta[i] + var_eta_suff_stasts[i] for i in range(len(prior_eta))]
 
         if _DEBUG_MODE:
-            import sys
             K, D = r.shape[-1], data.shape[-1]
             sbp_updates = var_eta_updates[:2]
             emiss_updates = var_eta_updates[2:]

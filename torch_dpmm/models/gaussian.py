@@ -1,7 +1,9 @@
 import torch as th
 from .base import DPMM
-from torch_dpmm.prob_tools.bayesian import FullNormalINIW, DiagonalNormalNIW, SingleNormalNIW, UnitNormalSpherical
+from torch_dpmm.bayesian_distributions import FullNormalINIW, DiagonalNormalNIW, SingleNormalNIW, UnitNormalSpherical
 from sklearn.cluster import kmeans_plusplus
+
+__all__ = ['FullGaussianDPMM', 'DiagonalGaussianDPMM', 'UnitGaussinaDPMM', 'SingleGaussianDPMM']
 
 
 def _get_kmeansplusplus_init(x, K):

@@ -1,8 +1,11 @@
+import torch as th
 from abc import ABC
 from .base import ExponentialFamilyDistribution
-from ..utils import *
-from ..constants import *
-from ..mat_utils import *
+from torch_dpmm.utils.constants import *
+from torch_dpmm.utils.mat_utils import *
+from torch_dpmm.utils.misc import *
+
+__all__ = ['FullNIW', 'DiagonalNIW', 'SingleNIW', 'SphericalNormal']
 
 
 class BaseNIW(ExponentialFamilyDistribution, ABC):

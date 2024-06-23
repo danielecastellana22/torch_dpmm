@@ -1,7 +1,5 @@
-import torch as th
-from .utils.bnpy_test import *
 from .utils.misc import *
-from torch_dpmm.prob_tools.bayesian import CategoricalSBP, DiagonalNormalNIW, FullNormalINIW, UnitNormalSpherical
+from torch_dpmm.bayesian_distributions import CategoricalSBP, UnitNormalSpherical
 th.manual_seed(1234)
 
 

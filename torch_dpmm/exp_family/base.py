@@ -1,6 +1,8 @@
-from typing import Any, Type, Collection
+from typing import Any, Collection
 import torch as th
-from ..constraints import *
+from torch_dpmm.utils.constraints import *
+
+__all__ = ['ExponentialFamilyDistribution']
 
 
 class ExponentialFamilyDistribution:

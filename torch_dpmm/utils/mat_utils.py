@@ -1,6 +1,8 @@
 import torch as th
-from torch_dpmm.prob_tools.utils import batch_outer_product, batched_trace_square_mat
+from torch_dpmm.utils.misc import batch_outer_product, batched_trace_square_mat
 from typing import Optional, Union
+
+__all__ = ['FullMatOps', 'DiagonalMatOps']
 
 
 class BaseMatOps:

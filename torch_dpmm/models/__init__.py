@@ -1,1 +1,1 @@
-from .gaussian import FullGaussianDPMM, DiagonalGaussianDPMM, UnitGaussinaDPMM, SingleGaussianDPMM
+from .gaussian import *
