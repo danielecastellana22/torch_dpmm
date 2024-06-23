@@ -2,7 +2,7 @@ import torch as th
 th.manual_seed(1234)
 from .utils.misc import *
 from torch_dpmm.models.base import DPMMFunction
-from torch_dpmm.prob_tools.conjugate_priors import StickBreakingPrior, DiagonalNIWPrior, FullINIWPrior
+from torch_dpmm.prob_tools.bayesian import CategoricalSBP, DiagonalNIWPrior, FullINIWPrior
 
 
 def _do_test(is_diagonal):
@@ -25,9 +25,9 @@ def _do_test(is_diagonal):
     K, D = comm_emisssion_post[0].shape
 
     emission_distr_class = DiagonalNIWPrior if is_diagonal else FullINIWPrior
-    my_mix_prior_eta = StickBreakingPrior.common_to_natural([th.ones(K), alphaDP * th.ones(K)])
+    my_mix_prior_eta = CategoricalSBP.common_to_natural([th.ones(K), alphaDP * th.ones(K)])
     my_emission_prior_eta = emission_distr_class.common_to_natural(emission_prior)
-    my_mix_var_eta = StickBreakingPrior.common_to_natural(list(stick_post))
+    my_mix_var_eta = CategoricalSBP.common_to_natural(list(stick_post))
     my_emission_var_eta = emission_distr_class.common_to_natural(list(comm_emisssion_post))
     my_eta = my_mix_var_eta + my_emission_var_eta
     ctx = FakeCtx()

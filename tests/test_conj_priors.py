@@ -1,7 +1,7 @@
 import torch as th
 from .utils.bnpy_test import *
 from .utils.misc import *
-from torch_dpmm.prob_tools.conjugate_priors import StickBreakingPrior, DiagonalNIWPrior, FullINIWPrior
+from torch_dpmm.prob_tools.bayesian import CategoricalSBP, DiagonalNormalNIW, FullNormalINIW, UnitNormalSpherical
 th.manual_seed(1234)
 
 
@@ -9,7 +9,7 @@ def test_e_log_pi():
     # it does not depend on diagonal/full
     bnpy_hmodel, x, stick_post, emisssion_post, stick_prior, emission_prior = create_data_and_bnpy_model(
         is_diagonal=True)
-    my_val = StickBreakingPrior.expected_log_params(StickBreakingPrior.common_to_natural(list(stick_post)))[0]
+    my_val = CategoricalSBP.expected_log_params(CategoricalSBP.common_to_natural(list(stick_post)))[0]
     bnpy_val = get_bnpy_E_log_pi(bnpy_hmodel)
     assert th.all(th.isclose(my_val, th.tensor(bnpy_val).float())), f"E_log_pi is not correct"
 
@@ -64,3 +64,14 @@ def test_e_log_x():
         my_val = conj_distr.expected_data_loglikelihood(x, eta)
         bnpy_val = get_bnpy_E_log_x(bnpy_hmodel, x)
         assert th.all(th.isclose(my_val, th.tensor(bnpy_val).float())), f"{m_type}: E_log_x is not correct"
+
+
+def test_e_log_x_unit_var():
+    bnpy_hmodel, x, stick_post, emisssion_post, stick_prior, emission_prior = create_data_and_bnpy_model(
+        is_diagonal=True)
+    emisssion_post = emisssion_post[:2]
+    eta = UnitNormalSpherical.common_to_natural(list(emisssion_post))
+    my_val = UnitNormalSpherical.expected_data_loglikelihood(x, eta)
+    from torch.distributions import MultivariateNormal as MVN
+    th_val = MVN(emisssion_post[0], th.diag_embed(th.ones_like(eta[0]))).log_prob(x.unsqueeze(1))
+    assert th.all(th.isclose(my_val, th.tensor(th_val).float())), f"UnitVarNormalPrior: E_log_x is not correct"

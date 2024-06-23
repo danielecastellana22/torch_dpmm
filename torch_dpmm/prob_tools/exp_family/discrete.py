@@ -8,6 +8,10 @@ class Beta(ExponentialFamilyDistribution):
     # common params: [alpha, beta]
     # natural params: [eta_1, eta_2]
 
+    _theta_names = ['aplha', 'beta']
+    _theta_shape_list = ['[K]', '[K]']
+    _theta_constraints_list = ['Positive()', 'Positive()']
+
     @classmethod
     def _h_x(cls, x):
         return 1/(x[0] * (1-x[0]))

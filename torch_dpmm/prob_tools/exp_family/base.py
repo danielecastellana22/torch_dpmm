@@ -1,4 +1,6 @@
+from typing import Any, Type, Collection
 import torch as th
+from ..constraints import *
 
 
 class ExponentialFamilyDistribution:
@@ -6,6 +8,49 @@ class ExponentialFamilyDistribution:
     # eta: natural parameters of the distribution
     # theta: common parameters of the distribution
     # x: a sample of the distribution
+
+    _theta_names = None
+    _theta_shape_list = None
+    _theta_constraints_list = None
+
+    @staticmethod
+    def __validate_params(name: str, value: Any,
+                          expected_shape: Collection[int], constraint: BaseConstraint):
+        expected_shape = tuple(expected_shape)
+
+        if not isinstance(value, th.Tensor):
+            value = th.tensor(value).float()
+
+        #if value.ndim == 0:
+        #    value = value.view((1,) * len(expected_shape)).expand(expected_shape)
+
+        # check the shape
+        if value.ndim > len(expected_shape):
+            raise ValueError(f'{name} has too many dimensions: we got {value.shape} but we expected {expected_shape}!')
+        elif value.ndim == len(expected_shape)-1:
+            value = value.unsqueeze(0).expand(expected_shape[:1] + tuple([-1]*(len(expected_shape)-1)))
+        elif value.ndim < len(expected_shape)-1:
+            raise ValueError(f'{name} has too few dimensions! We broadcast only along the first dimension:'
+                             f' we got {value.shape} but we expected {expected_shape}!')
+
+        assert value.ndim == len(expected_shape)
+        if value.shape != expected_shape:
+            raise ValueError(f'{name} has the wrong shape: we got {value.shape} but we expected {expected_shape}!')
+
+        # check the constraint
+        if not constraint(value):
+            raise ValueError(constraint.message(name, 'Gaussian-DPMM'))
+
+        return value
+
+    @classmethod
+    def validate_common_params(cls, K: int, D: int, theta: list[th.Tensor]) -> list[th.Tensor]:
+        out = []
+        for i in range(len(theta)):
+            out.append(cls.__validate_params(cls._theta_names[i], theta[i],
+                                             eval(cls._theta_shape_list[i]), eval(cls._theta_constraints_list[i])))
+        return out
+
 
     @classmethod
     def _h_x(cls, x: list[th.Tensor]) -> th.Tensor:

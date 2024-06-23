@@ -1,52 +1,21 @@
 from typing import Any, Type, Collection
 import torch as th
-from ..constraints import *
+from torch_dpmm.prob_tools.exp_family import ExponentialFamilyDistribution
 
 
-class ConjugatePriorDistribution:
+class BayesianDistribution:
+    r"""
+    This class implements bayesian distributions by using conjugate priors.
+    Let P(x | phi) the distribution of interest, this class define a distribution Q(phi | eta) over the parameter phi.
+    Q is the conjugate prior of P and eta are the variational parameters. We represent Q using the exponential family
+    representation to take advantege of the natural gradient for the SVB updates.
+    """
 
-    _exp_distr_class = None
-    _theta_names = None
-    _theta_shape_list = None
-    _theta_constraints_list = None
-
-    @staticmethod
-    def __validate_params(name: str, value: Any,
-                          expected_shape: Collection[int], constraint: BaseConstraint):
-        expected_shape = tuple(expected_shape)
-
-        if not isinstance(value, th.Tensor):
-            value = th.tensor(value).float()
-
-        #if value.ndim == 0:
-        #    value = value.view((1,) * len(expected_shape)).expand(expected_shape)
-
-        # check the shape
-        if value.ndim > len(expected_shape):
-            raise ValueError(f'{name} has too many dimensions: we got {value.shape} but we expected {expected_shape}!')
-        elif value.ndim == len(expected_shape)-1:
-            value = value.unsqueeze(0).expand(expected_shape[:1] + tuple([-1]*(len(expected_shape)-1)))
-        elif value.ndim < len(expected_shape)-1:
-            raise ValueError(f'{name} has too few dimensions! We broadcast only along the first dimension:'
-                             f' we got {value.shape} but we expected {expected_shape}!')
-
-        assert value.ndim == len(expected_shape)
-        if value.shape != expected_shape:
-            raise ValueError(f'{name} has the wrong shape: we got {value.shape} but we expected {expected_shape}!')
-
-        # check the constraint
-        if not constraint(value):
-            raise ValueError(constraint.message(name, 'Gaussian-DPMM'))
-
-        return value
+    _exp_distr_class: ExponentialFamilyDistribution = None
 
     @classmethod
     def validate_common_params(cls, K: int, D: int, theta: list[th.Tensor]) -> list[th.Tensor]:
-        out = []
-        for i in range(len(theta)):
-            out.append(cls.__validate_params(cls._theta_names[i], theta[i],
-                                             eval(cls._theta_shape_list[i]), eval(cls._theta_constraints_list[i])))
-        return out
+        return cls._exp_distr_class.validate_common_params(K, D, theta)
 
     @classmethod
     def expected_log_params(cls, eta: list[th.Tensor]) -> list[th.Tensor]:
@@ -85,8 +54,8 @@ class ConjugatePriorDistribution:
     @classmethod
     def expected_data_loglikelihood(cls, obs_data: th.Tensor, eta: list[th.Tensor]) -> th.Tensor:
         r"""
-        Let data ~ P(x | param) and param ~ Q(phi | eta), where Q is the conjugate prior distribution of P.
-        This method returns the expected loglikelihood of the data w.r.t. the prior Q: E_Q[log data].
+        Let data ~ P(x | phi) and Q(phi | eta), where Q is the conjugate prior distribution of P.
+        This method returns the expected loglikelihood of the data w.r.t. the prior Q: E_Q[log P(data)].
         The computation is batched.
 
         Args:

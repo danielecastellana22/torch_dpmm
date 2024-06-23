@@ -1,16 +1,17 @@
 from typing import Type
 import torch as th
-from .base import ConjugatePriorDistribution
-from ..exp_distributions import Beta
+from .base import BayesianDistribution
+from ..exp_family import Beta
 from ..constraints import *
 
 
-class StickBreakingPrior(ConjugatePriorDistribution):
-
+class CategoricalSBP(BayesianDistribution):
+    r"""
+    This class represent a Categorical distribution with a Stick Breaking Process as a prior.
+    P(x | pi) = Cat(pi)
+    Q(pi | u,v) = SBP(u,v)
+    """
     _exp_distr_class = Beta
-    _theta_names = ['aplha', 'beta']
-    _theta_shape_list = ['[K]', '[K]']
-    _theta_constraints_list = ['Positive()', 'Positive()']
 
     @classmethod
     def expected_data_loglikelihood(cls, obs_data, eta):

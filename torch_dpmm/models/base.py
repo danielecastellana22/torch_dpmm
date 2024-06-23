@@ -2,7 +2,7 @@ from typing import Type
 import torch as th
 import torch.nn as nn
 from torch_dpmm.prob_tools.utils import log_normalise
-from torch_dpmm.prob_tools.conjugate_priors import ConjugatePriorDistribution, StickBreakingPrior
+from torch_dpmm.prob_tools.bayesian import BayesianDistribution, CategoricalSBP
 from torch.autograd.function import once_differentiable
 from torch.autograd import Function
 from torch_dpmm.debug_mode import _DEBUG_MODE
@@ -14,7 +14,7 @@ class DPMMFunction(Function):
     def forward(ctx, data, emission_distr_class, prior_eta, *var_eta):
         mix_weights_prior_eta, emission_prior_eta = prior_eta[:2], prior_eta[2:]
         mix_weights_var_eta, emission_var_eta = var_eta[:2], var_eta[2:]
-        pi_contribution = StickBreakingPrior.expected_log_params(mix_weights_var_eta)[0]
+        pi_contribution = CategoricalSBP.expected_log_params(mix_weights_var_eta)[0]
         data_contribution = emission_distr_class.expected_data_loglikelihood(data, emission_var_eta)
 
         log_unnorm_r = pi_contribution.unsqueeze(0) + data_contribution
@@ -23,7 +23,7 @@ class DPMMFunction(Function):
 
         # compute the elbo
         elbo = ((r * data_contribution).sum()
-                - StickBreakingPrior.kl_div(mix_weights_var_eta, mix_weights_prior_eta).sum()
+                - CategoricalSBP.kl_div(mix_weights_var_eta, mix_weights_prior_eta).sum()
                 - emission_distr_class.kl_div(emission_var_eta, emission_prior_eta).sum()
                 # KL(q(z) || p(z)) where z is the cluster assignment
                 + (r.sum(0) * pi_contribution).sum() - (r * log_r).sum())
@@ -41,7 +41,7 @@ class DPMMFunction(Function):
         prior_eta = ctx.prior_eta
         r, data, *var_eta = ctx.saved_tensors
 
-        var_eta_suff_stasts = StickBreakingPrior.compute_posterior_suff_stats(r) + \
+        var_eta_suff_stasts = CategoricalSBP.compute_posterior_suff_stats(r) + \
                               emission_distr_class.compute_posterior_suff_stats(r, data)
 
         var_eta_updates = [prior_eta[i] + var_eta_suff_stasts[i] for i in range(len(prior_eta))]
@@ -51,7 +51,7 @@ class DPMMFunction(Function):
             K, D = r.shape[-1], data.shape[-1]
             sbp_updates = var_eta_updates[:2]
             emiss_updates = var_eta_updates[2:]
-            StickBreakingPrior.validate_common_params(K, D, StickBreakingPrior.natural_to_common(sbp_updates))
+            CategoricalSBP.validate_common_params(K, D, CategoricalSBP.natural_to_common(sbp_updates))
             emission_distr_class.validate_common_params(K, D, emission_distr_class.natural_to_common(emiss_updates))
 
         # The natural gradient is the difference between the current value and the new one
@@ -65,7 +65,7 @@ class DPMMFunction(Function):
 class DPMM(nn.Module):
 
     def __init__(self, K, D, alphaDP,
-                 emission_distr_class: Type[ConjugatePriorDistribution], emission_prior_theta: list[th.Tensor]):
+                 emission_distr_class: Type[BayesianDistribution], emission_prior_theta: list[th.Tensor]):
         super().__init__()
 
         self.K = K  # number of mixture components
@@ -73,10 +73,10 @@ class DPMM(nn.Module):
         self.emission_distr_class = emission_distr_class
 
         # store the prior nat params of the mixture weights and create the variational parameters
-        mix_weights_prior_theta = StickBreakingPrior.validate_common_params(K, D, [1, alphaDP])
+        mix_weights_prior_theta = CategoricalSBP.validate_common_params(K, D, [1, alphaDP])
         self.mix_weights_var_eta = []
         self.mix_weights_prior_eta = []
-        for i, p in enumerate(StickBreakingPrior.common_to_natural(mix_weights_prior_theta)):
+        for i, p in enumerate(CategoricalSBP.common_to_natural(mix_weights_prior_theta)):
             b_name = f'mix_prior_eta_{i}'
             p_name = f'mix_var_eta_{i}'
             self.register_buffer(b_name, p)
@@ -114,26 +114,26 @@ class DPMM(nn.Module):
 
     @th.no_grad()
     def get_var_params(self):
-        params = StickBreakingPrior.natural_to_common(self.mix_weights_var_eta) + \
+        params = CategoricalSBP.natural_to_common(self.mix_weights_var_eta) + \
                  self.emission_distr_class.natural_to_common(self.emission_var_eta)
 
         return (p.detach() for p in params)
 
     @th.no_grad()
     def get_num_active_components(self):
-        r = StickBreakingPrior.expected_params(self.mix_weights_var_eta)[0]
+        r = CategoricalSBP.expected_params(self.mix_weights_var_eta)[0]
         return th.sum(r > 0.01).item()
 
     @th.no_grad()
     def get_expected_params(self):
-        r = StickBreakingPrior.expected_params(self.mix_weights_var_eta)[0]
-        expected_emission_params = self.emission_distr_class.expected_params(self.emission_var_eta)
+        r = CategoricalSBP.expected_params(self.mix_weights_var_eta)[0].detach()
+        expected_emission_params = [v.detach() for v in self.emission_distr_class.expected_params(self.emission_var_eta)]
 
         return r, expected_emission_params
 
     @th.no_grad()
     def get_expected_log_likelihood(self, x):
-        log_r = StickBreakingPrior.expected_log_params(self.mix_weights_var_eta)[0]
+        log_r = CategoricalSBP.expected_log_params(self.mix_weights_var_eta)[0]
         exp_data_loglike = self.emission_distr_class.expected_data_loglikelihood(x, self.emission_var_eta)
         _, logZ = log_normalise(exp_data_loglike+log_r)
         return logZ
