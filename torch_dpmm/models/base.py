@@ -18,7 +18,7 @@ class DPMMFunction(Function):
         data_contribution = emission_distr_class.expected_data_loglikelihood(data, emission_var_eta)
 
         log_unnorm_r = pi_contribution.unsqueeze(0) + data_contribution
-        log_r, _ = log_normalise(log_unnorm_r)
+        log_r, log_Z = log_normalise(log_unnorm_r)
         r = th.exp(log_r)
 
         # compute the elbo
@@ -32,11 +32,11 @@ class DPMMFunction(Function):
         ctx.emission_distr_class = emission_distr_class
         ctx.prior_eta = prior_eta
 
-        return r, elbo / th.numel(data)
+        return r, -elbo / th.numel(data), log_Z
 
     @staticmethod
     @once_differentiable
-    def backward(ctx, pi_grad, elbo_grad):
+    def backward(ctx, pi_grad, elbo_grad, log_Z_grad):
         emission_distr_class = ctx.emission_distr_class
         prior_eta = ctx.prior_eta
         r, data, *var_eta = ctx.saved_tensors
@@ -78,7 +78,7 @@ class DPMM(nn.Module):
         for i, p in enumerate(CategoricalSBP.common_to_natural(mix_weights_prior_theta)):
             b_name = f'mix_prior_eta_{i}'
             p_name = f'mix_var_eta_{i}'
-            self.register_buffer(b_name, p)
+            self.register_buffer(b_name, p.contiguous())
             self.register_parameter(p_name, nn.Parameter(th.empty_like(p)))
             self.mix_weights_prior_eta.append(self.get_buffer(b_name))
             self.mix_weights_var_eta.append(self.get_parameter(p_name))
@@ -89,7 +89,7 @@ class DPMM(nn.Module):
         for i, p in enumerate(emission_distr_class.common_to_natural(emission_prior_theta)):
             b_name = f'emission_prior_eta_{i}'
             p_name = f'emission_var_eta_{i}'
-            self.register_buffer(b_name, p)
+            self.register_buffer(b_name, p.contiguous())
             self.register_parameter(p_name, nn.Parameter(th.empty_like(p)))
             self.emission_prior_eta.append(self.get_buffer(b_name))
             self.emission_var_eta.append(self.get_parameter(p_name))
@@ -133,11 +133,4 @@ class DPMM(nn.Module):
         expected_emission_params = [v.detach() for v in self.emission_distr_class.expected_params(self.emission_var_eta)]
 
         return r, expected_emission_params
-
-    @th.no_grad()
-    def get_expected_log_likelihood(self, x):
-        log_r = CategoricalSBP.expected_log_params(self.mix_weights_var_eta)[0]
-        exp_data_loglike = self.emission_distr_class.expected_data_loglikelihood(x, self.emission_var_eta)
-        _, logZ = log_normalise(exp_data_loglike+log_r)
-        return logZ
 
