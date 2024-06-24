@@ -17,7 +17,7 @@ def log_normalise(log_tab):
     log_max = th.max(log_tab, -1, keepdim=True).values
     scaled_tab = log_tab-log_max
     log_Z = th.log(th.sum(th.exp(scaled_tab), -1, keepdim=True)) + log_max
-    return (log_tab - log_Z), log_Z
+    return (log_tab - log_Z), log_Z.squeeze(-1)
 
 
 def batched_trace_square_mat(mat, diag_coeff=None):

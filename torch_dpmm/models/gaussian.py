@@ -3,7 +3,7 @@ from .base import DPMM
 from torch_dpmm.bayesian_distributions import FullNormalINIW, DiagonalNormalNIW, SingleNormalNIW, UnitNormalSpherical
 from sklearn.cluster import kmeans_plusplus
 
-__all__ = ['FullGaussianDPMM', 'DiagonalGaussianDPMM', 'UnitGaussinaDPMM', 'SingleGaussianDPMM']
+__all__ = ['FullGaussianDPMM', 'DiagonalGaussianDPMM', 'UnitGaussianDPMM', 'SingleGaussianDPMM']
 
 
 def _get_gaussian_init_vals(x, D, mask, v_c=1, v_n=1):
@@ -73,10 +73,10 @@ class SingleGaussianDPMM(DPMM):
         return self.emission_distr_class.common_to_natural([tau, c, B, n])
 
 
-class UnitGaussinaDPMM(DPMM):
+class UnitGaussianDPMM(DPMM):
 
     def __init__(self, K, D, alphaDP, mu0, lam):
-        super(UnitGaussinaDPMM, self).__init__(K, D, alphaDP, UnitNormalSpherical, [mu0, lam])
+        super(UnitGaussianDPMM, self).__init__(K, D, alphaDP, UnitNormalSpherical, [mu0, lam])
 
     def _get_init_vals_emission_var_eta(self, x: th.Tensor | None, mask):
         tau, c, _, _ = _get_gaussian_init_vals(x, self.D, mask, v_c=1)
