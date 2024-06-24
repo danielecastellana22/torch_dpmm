@@ -6,7 +6,13 @@ from sklearn.cluster import kmeans_plusplus
 __all__ = ['FullGaussianDPMM', 'DiagonalGaussianDPMM', 'UnitGaussianDPMM', 'SingleGaussianDPMM']
 
 
-def _get_gaussian_init_vals(x, D, mask, v_c=1, v_n=1):
+def _get_gaussian_init_vals(x, D, mask, v_c=None, v_n=None):
+    if v_c is None:
+        v_c = 1
+
+    if v_n is None:
+        v_n = D+2
+
     K = th.sum(mask).item()
 
     # compute initialisation for tau
@@ -46,7 +52,7 @@ class FullGaussianDPMM(DPMM):
         super(FullGaussianDPMM, self).__init__(K, D, alphaDP, FullNormalINIW, [mu0, lam, Phi, nu])
 
     def _get_init_vals_emission_var_eta(self, x: th.Tensor | None, mask):
-        tau, c, B, n = _get_gaussian_init_vals(x, self.D, mask, v_c=1, v_n=self.D+2)
+        tau, c, B, n = _get_gaussian_init_vals(x, self.D, mask)
         B = th.diag_embed(B*th.ones_like(tau))
         return self.emission_distr_class.common_to_natural([tau, c, B, n])
 
@@ -57,7 +63,7 @@ class DiagonalGaussianDPMM(DPMM):
         super(DiagonalGaussianDPMM, self).__init__(K, D, alphaDP, DiagonalNormalNIW, [mu0, lam, Phi, nu])
 
     def _get_init_vals_emission_var_eta(self, x: th.Tensor = None, mask=None):
-        tau, c, B, n = _get_gaussian_init_vals(x, self.D, mask, v_c=1, v_n=self.D + 2)
+        tau, c, B, n = _get_gaussian_init_vals(x, self.D, mask)
         B = B*th.ones_like(tau)
         return self.emission_distr_class.common_to_natural([tau, c, B, n])
 
@@ -68,7 +74,7 @@ class SingleGaussianDPMM(DPMM):
         super(SingleGaussianDPMM, self).__init__(K, D, alphaDP, SingleNormalNIW, [mu0, lam, Phi, nu])
 
     def _get_init_vals_emission_var_eta(self, x: th.Tensor | None, mask):
-        tau, c, B, n = _get_gaussian_init_vals(x, self.D, mask, v_c=1, v_n=self.D+2)
+        tau, c, B, n = _get_gaussian_init_vals(x, self.D, mask)
         B = B * th.ones_like(c)
         return self.emission_distr_class.common_to_natural([tau, c, B, n])
 
@@ -79,5 +85,5 @@ class UnitGaussianDPMM(DPMM):
         super(UnitGaussianDPMM, self).__init__(K, D, alphaDP, UnitNormalSpherical, [mu0, lam])
 
     def _get_init_vals_emission_var_eta(self, x: th.Tensor | None, mask):
-        tau, c, _, _ = _get_gaussian_init_vals(x, self.D, mask, v_c=1)
+        tau, c, _, _ = _get_gaussian_init_vals(x, self.D, mask)
         return self.emission_distr_class.common_to_natural([tau, c])

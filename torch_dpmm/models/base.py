@@ -105,16 +105,30 @@ class DPMM(nn.Module):
                                   self.mix_weights_prior_eta + self.emission_prior_eta,  # concatenate the eta lists
                                   *(self.mix_weights_var_eta + self.emission_var_eta))  # concatenate the eta lists
 
-    def init_var_params(self, x=None, mask=None):
+    def init_var_params(self, x=None, mask=None, mix_init_theta = None, emission_init_theta=None):
         if mask is None:
             mask = th.ones(self.K, dtype=th.bool, device=self.mix_weights_var_eta[0].device)
 
-        for p in self.mix_weights_var_eta:
-            p.data[mask] = 1
+        K = th.sum(mask)
+        mix_init_eta = None
+        if mix_init_theta is not None:
+            mix_init_theta = CategoricalSBP.validate_common_params(K, self.D, mix_init_theta)
+            mix_init_eta = CategoricalSBP.common_to_natural(mix_init_theta)
 
-        init_v = self._get_init_vals_emission_var_eta(x, mask)
+        for i, p in enumerate(self.mix_weights_var_eta):
+            if mix_init_eta is not None:
+                p.data[mask] = mix_init_eta[i]
+            else:
+                p.data[mask] = 1
+
+        if emission_init_theta is not None:
+            emission_init_theta = self.emission_distr_class.validate_common_params(K, self.D, emission_init_theta)
+            emission_init_eta = self.emission_distr_class.common_to_natural(emission_init_theta)
+        else:
+            emission_init_eta = self._get_init_vals_emission_var_eta(x, mask)
+
         for i, p in enumerate(self.emission_var_eta):
-            p.data[mask] = init_v[i]
+            p.data[mask] = emission_init_eta[i]
 
     def _get_init_vals_emission_var_eta(self, x, mask):
         raise NotImplementedError('This should be implmented in the sublcasses!')
