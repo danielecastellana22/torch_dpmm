@@ -120,7 +120,7 @@ class DiagonalNIW(BaseNIW):
 class SingleNIW(DiagonalNIW):
 
     _theta_shape_list = ['[K, D]', '[K]', '[K]', '[K]']
-    _theta_constraints_list = ['AnyValue()', 'Positive()', 'Positive()', 'GreaterThan(2)']
+    _theta_constraints_list = ['AnyValue()', 'Positive()', 'Positive()', 'GreaterThan(D+1)']
 
     @classmethod
     def _h_x(cls, x: list[th.Tensor]) -> th.Tensor:
