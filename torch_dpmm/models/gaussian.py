@@ -6,12 +6,15 @@ from sklearn.cluster import kmeans_plusplus
 __all__ = ['FullGaussianDPMM', 'DiagonalGaussianDPMM', 'UnitGaussianDPMM', 'SingleGaussianDPMM']
 
 
-def _get_gaussian_init_vals(x, D, mask, v_c=None, v_n=None):
+def _get_gaussian_init_vals(x, D, mask, v_c=None, v_n=None, B_init = None):
     if v_c is None:
         v_c = 1
 
     if v_n is None:
         v_n = D+2
+
+    if B_init is None:
+        B_init = 1
 
     K = th.sum(mask).item()
 
@@ -33,7 +36,7 @@ def _get_gaussian_init_vals(x, D, mask, v_c=None, v_n=None):
             tau[:to_init] = th.tensor(mean_np, device=mask.device)
 
     # compute initialisation for B
-    B = th.tensor(1.0, device=mask.device)
+    B = th.tensor(B_init, device=mask.device)
     if x is not None:
         B = th.var(x) * B
 
@@ -52,7 +55,7 @@ class FullGaussianDPMM(DPMM):
         super(FullGaussianDPMM, self).__init__(K, D, alphaDP, FullNormalINIW, [mu0, lam, Phi, nu])
 
     def _get_init_vals_emission_var_eta(self, x: th.Tensor | None, mask):
-        tau, c, B, n = _get_gaussian_init_vals(x, self.D, mask)
+        tau, c, B, n = _get_gaussian_init_vals(x, self.D, mask, B_init=self.em)
         B = th.diag_embed(B*th.ones_like(tau))
         return self.emission_distr_class.common_to_natural([tau, c, B, n])
 

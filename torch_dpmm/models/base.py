@@ -105,7 +105,7 @@ class DPMM(nn.Module):
                                   self.mix_weights_prior_eta + self.emission_prior_eta,  # concatenate the eta lists
                                   *(self.mix_weights_var_eta + self.emission_var_eta))  # concatenate the eta lists
 
-    def init_var_params(self, x=None, mask=None, mix_init_theta = None, emission_init_theta=None):
+    def init_var_params(self, x=None, mask=None, mix_init_theta=None, emission_init_theta=None):
         if mask is None:
             mask = th.ones(self.K, dtype=th.bool, device=self.mix_weights_var_eta[0].device)
 
