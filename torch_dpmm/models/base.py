@@ -89,9 +89,7 @@ class DPMM(nn.Module):
             self.register_buffer(b_name, p.contiguous())
             self.register_parameter(p_name, nn.Parameter(th.empty_like(p)))
             self.emission_var_eta.append(self.get_parameter(p_name))
-
-        self.init_var_params()
-
+            
     @property
     def mix_weights_prior_eta(self):
         return [self.get_buffer(f'mix_prior_eta_{i}') for i in range(len(self.mix_weights_var_eta))]

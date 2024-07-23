@@ -49,13 +49,16 @@ def _get_gaussian_init_vals(x, D, mask, v_c=None, v_n=None, B_init = None):
     return tau, c, B, n
 
 
+# TODO: B_init works if and only if Phi is a number
 class FullGaussianDPMM(DPMM):
 
     def __init__(self, K, D, alphaDP, mu0, lam, Phi, nu):
         super(FullGaussianDPMM, self).__init__(K, D, alphaDP, FullNormalINIW, [mu0, lam, Phi, nu])
+        self.B_init = Phi
+        self.init_var_params()
 
     def _get_init_vals_emission_var_eta(self, x: th.Tensor | None, mask):
-        tau, c, B, n = _get_gaussian_init_vals(x, self.D, mask, B_init=self.em)
+        tau, c, B, n = _get_gaussian_init_vals(x, self.D, mask, B_init=self.B_init)
         B = th.diag_embed(B*th.ones_like(tau))
         return self.emission_distr_class.common_to_natural([tau, c, B, n])
 
@@ -64,9 +67,11 @@ class DiagonalGaussianDPMM(DPMM):
 
     def __init__(self, K, D, alphaDP, mu0, lam, Phi, nu):
         super(DiagonalGaussianDPMM, self).__init__(K, D, alphaDP, DiagonalNormalNIW, [mu0, lam, Phi, nu])
+        self.B_init = Phi
+        self.init_var_params()
 
     def _get_init_vals_emission_var_eta(self, x: th.Tensor = None, mask=None):
-        tau, c, B, n = _get_gaussian_init_vals(x, self.D, mask)
+        tau, c, B, n = _get_gaussian_init_vals(x, self.D, mask, B_init=self.B_init)
         B = B*th.ones_like(tau)
         return self.emission_distr_class.common_to_natural([tau, c, B, n])
 
@@ -75,9 +80,11 @@ class SingleGaussianDPMM(DPMM):
 
     def __init__(self, K, D, alphaDP, mu0, lam, Phi, nu):
         super(SingleGaussianDPMM, self).__init__(K, D, alphaDP, SingleNormalNIW, [mu0, lam, Phi, nu])
+        self.B_init = Phi
+        self.init_var_params()
 
     def _get_init_vals_emission_var_eta(self, x: th.Tensor | None, mask):
-        tau, c, B, n = _get_gaussian_init_vals(x, self.D, mask)
+        tau, c, B, n = _get_gaussian_init_vals(x, self.D, mask, B_init=self.B_init)
         B = B * th.ones_like(c)
         return self.emission_distr_class.common_to_natural([tau, c, B, n])
 
@@ -86,6 +93,7 @@ class UnitGaussianDPMM(DPMM):
 
     def __init__(self, K, D, alphaDP, mu0, lam):
         super(UnitGaussianDPMM, self).__init__(K, D, alphaDP, UnitNormalSpherical, [mu0, lam])
+        self.init_var_params()
 
     def _get_init_vals_emission_var_eta(self, x: th.Tensor | None, mask):
         tau, c, _, _ = _get_gaussian_init_vals(x, self.D, mask)
