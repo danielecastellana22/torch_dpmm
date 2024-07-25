@@ -46,9 +46,18 @@ def _get_gaussian_init_vals(x, D, mask, v_c=None, v_n=None):
     return tau, c, B, n
 
 
+def _to_common_params(D, mu_prior, mu_prior_strenght, var_prior, var_prior_strenght):
+    mu0 = mu_prior
+    lam = mu_prior_strenght
+    n = var_prior_strenght + D + 1
+    Phi = var_prior * n
+    return mu0, lam, Phi, n
+
+
 class FullGaussianDPMM(DPMM):
 
-    def __init__(self, K, D, alphaDP, mu0, lam, Phi, nu):
+    def __init__(self, K, D, alphaDP, mu_prior, mu_prior_strenght, var_prior, var_prior_strenght):
+        mu0, lam, Phi, nu = _to_common_params(D, mu_prior, mu_prior_strenght, var_prior, var_prior_strenght)
         super(FullGaussianDPMM, self).__init__(K, D, alphaDP, FullNormalINIW, [mu0, lam, Phi, nu])
         self.init_var_params()
 
@@ -60,7 +69,8 @@ class FullGaussianDPMM(DPMM):
 
 class DiagonalGaussianDPMM(DPMM):
 
-    def __init__(self, K, D, alphaDP, mu0, lam, Phi, nu):
+    def __init__(self, K, D, alphaDP,  mu_prior, mu_prior_strenght, var_prior, var_prior_strenght):
+        mu0, lam, Phi, nu = _to_common_params(D, mu_prior, mu_prior_strenght, var_prior, var_prior_strenght)
         super(DiagonalGaussianDPMM, self).__init__(K, D, alphaDP, DiagonalNormalNIW, [mu0, lam, Phi, nu])
         self.init_var_params()
 
@@ -72,7 +82,8 @@ class DiagonalGaussianDPMM(DPMM):
 
 class SingleGaussianDPMM(DPMM):
 
-    def __init__(self, K, D, alphaDP, mu0, lam, Phi, nu):
+    def __init__(self, K, D, alphaDP, mu_prior, mu_prior_strenght, var_prior, var_prior_strenght):
+        mu0, lam, Phi, nu = _to_common_params(D, mu_prior, mu_prior_strenght, var_prior, var_prior_strenght)
         super(SingleGaussianDPMM, self).__init__(K, D, alphaDP, SingleNormalNIW, [mu0, lam, Phi, nu])
         self.init_var_params()
 
@@ -84,7 +95,8 @@ class SingleGaussianDPMM(DPMM):
 
 class UnitGaussianDPMM(DPMM):
 
-    def __init__(self, K, D, alphaDP, mu0, lam):
+    def __init__(self, K, D, alphaDP,  mu_prior, mu_prior_strenght):
+        mu0, lam = mu_prior, mu_prior_strenght
         super(UnitGaussianDPMM, self).__init__(K, D, alphaDP, UnitNormalSpherical, [mu0, lam])
         self.init_var_params()
 
