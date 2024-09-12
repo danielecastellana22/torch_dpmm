@@ -21,13 +21,13 @@ def _get_gaussian_init_vals(x, D, mask, v_c=None, v_n=None):
     else:
         x_np = x.detach().cpu().numpy()
         # initialisation makes the difference: we should cover the input space
-        if x_np.shape[0] > 3 * K:
+        if x_np.shape[0] >= K:
             # there are enough sample to init all K clusters
             mean_np, _ = kmeans_plusplus(x_np, K)
             tau = th.tensor(mean_np, device=mask.device)
         else:
             # there are few samples
-            to_init = int(x_np.shape[0] / 3)
+            to_init = x_np.shape[0]
             mean_np, _ = kmeans_plusplus(x_np, to_init)
             tau = th.zeros([K, D], device=mask.device)
             tau[:to_init] = th.tensor(mean_np, device=mask.device)
