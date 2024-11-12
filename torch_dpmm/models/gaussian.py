@@ -2,6 +2,8 @@ import torch as th
 from .base import DPMM
 from torch_dpmm.bayesian_distributions import FullNormalINIW, DiagonalNormalNIW, SingleNormalNIW, UnitNormalSpherical
 from sklearn.cluster import kmeans_plusplus
+import warnings
+
 
 __all__ = ['FullGaussianDPMM', 'DiagonalGaussianDPMM', 'UnitGaussianDPMM', 'SingleGaussianDPMM']
 
@@ -13,23 +15,29 @@ def _get_gaussian_init_vals(x, D, mask, v_c=None, v_n=None):
     if v_n is None:
         v_n = D+2
 
-    K = th.sum(mask).item()
+    K_to_init = th.sum(mask).item()
+    if K_to_init == 0:
+        warnings.warn('There are no clusters to initialise!', UserWarning)
+        return (th.tensor([], device=mask.device),
+                th.tensor([], device=mask.device),
+                th.tensor([], device=mask.device),
+                th.tensor([], device=mask.device))
 
     # compute initialisation for tau
     if x is None:
-        tau = th.zeros([K, D], device=mask.device)
+        tau = th.zeros([K_to_init, D], device=mask.device)
     else:
         x_np = x.detach().cpu().numpy()
         # initialisation makes the difference: we should cover the input space
-        if x_np.shape[0] >= K:
-            # there are enough sample to init all K clusters
-            mean_np, _ = kmeans_plusplus(x_np, K)
+        if x_np.shape[0] >= K_to_init:
+            # there are enough sample to init all K_to_init clusters
+            mean_np, _ = kmeans_plusplus(x_np, K_to_init)
             tau = th.tensor(mean_np, device=mask.device)
         else:
             # there are few samples
             to_init = x_np.shape[0]
             mean_np, _ = kmeans_plusplus(x_np, to_init)
-            tau = th.zeros([K, D], device=mask.device)
+            tau = th.zeros([K_to_init, D], device=mask.device)
             tau[:to_init] = th.tensor(mean_np, device=mask.device)
 
     # compute initialisation for B
@@ -38,10 +46,10 @@ def _get_gaussian_init_vals(x, D, mask, v_c=None, v_n=None):
         B = th.var(x) * B
 
     # compute initialisation for c
-    c = v_c * th.ones([K], device=mask.device)
+    c = v_c * th.ones([K_to_init], device=mask.device)
 
     # compute initialisation for n
-    n = v_n * th.ones([K], device=mask.device)
+    n = v_n * th.ones([K_to_init], device=mask.device)
 
     return tau, c, B, n
 
